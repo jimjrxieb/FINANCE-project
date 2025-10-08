@@ -1,0 +1,217 @@
+# ============================================================================
+# SECUREBANK PAYMENT PLATFORM - DOCKER COMPOSE
+# INTENTIONALLY INSECURE CONFIGURATION
+# ============================================================================
+# PCI-DSS Violations:
+# - No network segmentation (PCI 1.2.1)
+# - Direct internet exposure (PCI 1.3.2)
+# - Default credentials (PCI 2.1)
+# - No encryption at rest (PCI 3.4)
+# - No TLS for internal connections (PCI 4.1)
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # PAYMENT API (BACKEND)
+  # ==========================================================================
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: securebank-api
+    ports:
+      - "3000:3000"  # ❌ PCI 1.3.2: Direct internet exposure
+    environment:
+      # ❌ PCI 2.1: Default database credentials
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: securebank
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+
+      # ❌ PCI 2.1: Redis with no password
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+
+      # ❌ PCI 8.2.1: Weak JWT secret
+      JWT_SECRET: secret123
+
+      # ❌ PCI 2.1: Default admin credentials
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+
+      # ❌ Security: Hardcoded encryption key
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+
+      NODE_ENV: development
+      PORT: 3000
+      LOG_SENSITIVE_DATA: "true"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - default  # ❌ PCI 1.2.1: No network segmentation
+    restart: unless-stopped
+    # ❌ PCI 2.2: No resource limits (DoS risk)
+
+  # ==========================================================================
+  # POSTGRESQL DATABASE
+  # ==========================================================================
+  db:
+    image: postgres:14-alpine
+    container_name: securebank-db
+    ports:
+      - "5432:5432"  # ❌ PCI 1.3.2: Database exposed to internet!
+    environment:
+      # ❌ PCI 2.1: Default credentials
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: securebank
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # ❌ PCI 3.4: No encryption at rest
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - default  # ❌ Same network as public-facing API
+    restart: unless-stopped
+    # ❌ No backup strategy configured
+
+  # ==========================================================================
+  # REDIS (SESSION STORAGE)
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: securebank-redis
+    ports:
+      - "6379:6379"  # ❌ PCI 1.3.2: Redis exposed to internet!
+    command: redis-server --requirepass ""  # ❌ PCI 2.1: No password!
+    volumes:
+      - redis_data:/data
+    networks:
+      - default  # ❌ Same network as API
+    restart: unless-stopped
+    # ❌ PCI 3.2: May store card data in cache (unencrypted)
+
+  # ==========================================================================
+  # NGINX REVERSE PROXY (WEAK TLS)
+  # ==========================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: securebank-nginx
+    ports:
+      - "80:80"    # ❌ HTTP exposed
+      - "443:443"  # HTTPS but weak configuration
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infrastructure/nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - api
+    networks:
+      - default
+    restart: unless-stopped
+    # ❌ PCI 4.1: Weak TLS configuration (see nginx.conf)
+
+  # ==========================================================================
+  # HASHICORP VAULT (INTENTIONALLY MISCONFIGURED)
+  # ==========================================================================
+  vault:
+    image: vault:latest
+    container_name: securebank-vault
+    ports:
+      - "8200:8200"  # ❌ Vault exposed to internet!
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root  # ❌ PCI 2.1: Default token in dev mode
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - default
+    restart: unless-stopped
+    # ❌ Running in DEV mode (stores secrets in memory, not persistent)
+    # ❌ PCI 3.4: Encryption keys stored with encrypted data
+
+  # ==========================================================================
+  # FRONTEND DASHBOARD (REACT)
+  # ==========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: securebank-frontend
+    ports:
+      - "3001:3001"  # ❌ Different port to avoid conflict with API
+    environment:
+      REACT_APP_API_URL: http://api:3000  # ❌ PCI 4.1: HTTP not HTTPS
+      REACT_APP_ENV: development
+    depends_on:
+      - api
+    networks:
+      - default
+    restart: unless-stopped
+    # ❌ PCI 6.5.10: No security headers
+    # ❌ Frontend can access backend directly (should go through nginx)
+
+  # ==========================================================================
+  # OPEN POLICY AGENT (OPA) - Policy Engine
+  # ==========================================================================
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: securebank-opa
+    ports:
+      - "8181:8181"  # ❌ OPA API exposed
+    command:
+      - "run"
+      - "--server"
+      - "--log-level=debug"
+    volumes:
+      - ./opa-policies:/policies
+    networks:
+      - default
+    restart: unless-stopped
+    # ❌ No authentication on OPA API
+    # ❌ Policies loaded but not enforced
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  default:
+    driver: bridge
+    # ❌ PCI 1.2.1: Single network - no segmentation
+    # Should have:
+    #   - DMZ network (for nginx)
+    #   - Application network (for API)
+    #   - Database network (for DB, Redis)
+    #   - Management network (for Vault)
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  postgres_data:
+    # ❌ PCI 3.4: No encryption at rest
+    driver: local
+
+  redis_data:
+    driver: local
+
+# ============================================================================
+# VIOLATION SUMMARY
+# ============================================================================
+# This Docker Compose configuration contains the following PCI-DSS violations:
+#
+# 1. PCI 1.2.1: No network segmentation (all services on same network)
+# 2. PCI 1.3.2: Direct internet exposure of database and cache
+# 3. PCI 2.1: Default credentials for all services
+# 4. PCI 2.2: No resource limits, unnecessary services exposed
+# 5. PCI 3.4: No encryption at rest for database volumes
+# 6. PCI 4.1: Weak TLS configuration (see nginx.conf)
+# 7. PCI 6.6: No WAF or application firewall
+# 8. PCI 10.5: No centralized logging
+# 9. PCI 11.4: No intrusion detection
+#
+# Total violations in infrastructure: 15+
+# ============================================================================
