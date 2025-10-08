@@ -104,22 +104,69 @@ app.use((err, req, res, next) => {
 // START SERVER
 // ============================================================================
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`
-╔════════════════════════════════════════════════════════════════╗
-║  SecureBank Payment Platform API                               ║
-║  ⚠️  INTENTIONALLY INSECURE - DEMO ONLY ⚠️                      ║
-╠════════════════════════════════════════════════════════════════╣
-║  Server:      http://0.0.0.0:${PORT}
-║  Environment: ${process.env.NODE_ENV}
-║  Database:    ${process.env.DATABASE_HOST}:${process.env.DATABASE_PORT}
-║  Redis:       ${process.env.REDIS_HOST}:${process.env.REDIS_PORT}
-╠════════════════════════════════════════════════════════════════╣
-║  ❌ Contains 30+ intentional PCI-DSS violations                ║
-║  ❌ For GP-Copilot demonstration purposes only                 ║
-║  ❌ DO NOT use in production environments                      ║
-╚════════════════════════════════════════════════════════════════╝
-    `);
-});
+// Import database initialization
+const { initializeDatabasePool, initializeDatabase } = require('./config/database');
+
+/**
+ * Initialize application and start server
+ */
+async function startServer() {
+    try {
+        console.log('');
+        console.log('╔════════════════════════════════════════════════════════════════╗');
+        console.log('║  SecureBank Payment Platform API                               ║');
+        console.log('║  ⚠️  INTENTIONALLY INSECURE - DEMO ONLY ⚠️                      ║');
+        console.log('╚════════════════════════════════════════════════════════════════╝');
+        console.log('');
+
+        // Initialize database connection pool (uses secrets module)
+        console.log('🔄 Initializing database connection...');
+        await initializeDatabasePool();
+
+        // Initialize database schema
+        console.log('🔄 Initializing database schema...');
+        await initializeDatabase();
+
+        // Start Express server
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log('');
+            console.log('╔════════════════════════════════════════════════════════════════╗');
+            console.log('║  🚀 SecureBank API Server Running                             ║');
+            console.log('╠════════════════════════════════════════════════════════════════╣');
+            console.log(`║  Server:      http://0.0.0.0:${PORT.toString().padEnd(39)}║`);
+            console.log(`║  Environment: ${(process.env.NODE_ENV || 'development').padEnd(39)}║`);
+            console.log(`║  Security:    ${(process.env.SECURITY_MODE || 'BEFORE').padEnd(39)}║`);
+            console.log('╠════════════════════════════════════════════════════════════════╣');
+            console.log('║  ❌ Contains 30+ intentional PCI-DSS violations                ║');
+            console.log('║  ❌ For GP-Copilot demonstration purposes only                 ║');
+            console.log('║  ❌ DO NOT use in production environments                      ║');
+            console.log('╚════════════════════════════════════════════════════════════════╝');
+            console.log('');
+        });
+
+    } catch (error) {
+        console.error('');
+        console.error('╔════════════════════════════════════════════════════════════════╗');
+        console.error('║  ❌ FATAL ERROR: Server failed to start                        ║');
+        console.error('╚════════════════════════════════════════════════════════════════╝');
+        console.error('');
+        console.error('Error:', error.message);
+        console.error('');
+
+        if (process.env.SECURITY_MODE === 'AFTER') {
+            console.error('💡 TROUBLESHOOTING (AFTER mode):');
+            console.error('   - Check that AWS Secrets Manager is accessible');
+            console.error('   - If local: Is LocalStack running? Run: docker ps | grep localstack');
+            console.error('   - If local: Are secrets initialized? Run: ./scripts/init-localstack.sh');
+            console.error('   - If AWS: Does the pod have correct IAM role (IRSA)?');
+            console.error('');
+        }
+
+        process.exit(1);
+    }
+}
+
+// Start the server
+startServer();
 
 module.exports = app;

@@ -3,43 +3,85 @@
 // ============================================================================
 // PCI-DSS Violations:
 // - No encryption at rest
-// - Default credentials
+// - Default credentials (BEFORE mode)
 // - No connection pooling limits
 // - SQL injection vulnerabilities (by design)
+//
+// SECURITY_MODE support:
+// - BEFORE: Hardcoded credentials from environment
+// - AFTER: Credentials from Secrets Manager
 // ============================================================================
 
 const { Pool } = require('pg');
+const { getDatabaseCredentials, SECURITY_MODE } = require('./secrets');
 
-// ❌ PCI 2.1: Using default credentials
-// ❌ PCI 3.4: No SSL/TLS for database connections
-const pool = new Pool({
-    host: process.env.DATABASE_HOST || 'localhost',
-    port: process.env.DATABASE_PORT || 5432,
-    database: process.env.DATABASE_NAME || 'securebank',
-    user: process.env.DATABASE_USER || 'postgres',
-    password: process.env.DATABASE_PASSWORD || 'postgres',
-    // ❌ PCI 4.1: No SSL encryption
-    ssl: false,
-    // ❌ Security: No connection limits (DoS risk)
-    max: 100,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-});
+let pool = null;
 
-// ❌ PCI 10.1: Log connections including credentials
-pool.on('connect', () => {
-    console.log('Database connected:', {
-        host: process.env.DATABASE_HOST,
-        user: process.env.DATABASE_USER,
-        // ❌ Logging password!
-        password: process.env.DATABASE_PASSWORD
-    });
-});
+/**
+ * Initialize database connection pool
+ * Uses secrets module to get credentials based on SECURITY_MODE
+ */
+async function initializeDatabasePool() {
+    try {
+        // Get credentials from secrets module (respects SECURITY_MODE)
+        const credentials = await getDatabaseCredentials();
 
-pool.on('error', (err) => {
-    // ❌ PCI 10.3: Error logs may contain sensitive data
-    console.error('Unexpected database error:', err.stack);
-});
+        // ❌ PCI 2.1: Using credentials (potentially default in BEFORE mode)
+        // ❌ PCI 3.4: No SSL/TLS for database connections
+        pool = new Pool({
+            host: credentials.host,
+            port: credentials.port,
+            database: credentials.database,
+            user: credentials.username,
+            password: credentials.password,
+            // ❌ PCI 4.1: No SSL encryption
+            ssl: false,
+            // ❌ Security: No connection limits (DoS risk)
+            max: 100,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 2000,
+        });
+
+        // ❌ PCI 10.1: Log connections (but not credentials in AFTER mode)
+        pool.on('connect', () => {
+            if (SECURITY_MODE === 'BEFORE') {
+                console.log('Database connected:', {
+                    host: credentials.host,
+                    user: credentials.username,
+                    // ❌ Logging password in BEFORE mode!
+                    password: credentials.password
+                });
+            } else {
+                console.log('✅ Database connected successfully');
+            }
+        });
+
+        pool.on('error', (err) => {
+            // ❌ PCI 10.3: Error logs may contain sensitive data
+            console.error('Unexpected database error:', err.stack);
+        });
+
+        // Test connection
+        await pool.query('SELECT NOW()');
+        console.log('✅ Database connection pool initialized');
+
+        return pool;
+
+    } catch (error) {
+        console.error('❌ Failed to initialize database connection pool:', error.message);
+        throw error;
+    }
+}
+
+/**
+ * Get database pool (must call initializeDatabasePool first)
+ */
+function getPool() {
+    if (!pool) {
+        throw new Error('Database pool not initialized. Call initializeDatabasePool() first.');
+    }
+    return pool;
+}
 
 // ============================================================================
 // RAW QUERY FUNCTION (ENABLES SQL INJECTION)
@@ -206,7 +248,8 @@ async function insertDefaultAdmin() {
 // ============================================================================
 
 module.exports = {
-    pool,
+    initializeDatabasePool,
+    getPool,
     executeRawQuery,
     buildUnsafeQuery,
     initializeDatabase
