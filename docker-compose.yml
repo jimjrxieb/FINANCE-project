@@ -15,12 +15,16 @@ services:
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=s3,secretsmanager,cloudwatch,iam
+      - SERVICES=s3,secretsmanager,cloudwatch,iam,rds,ec2,eks,ecr
       - DEBUG=1
-      - DATA_DIR=/tmp/localstack/data
+      - DATA_DIR=/var/lib/localstack
       - DOCKER_HOST=unix:///var/run/docker.sock
+      - PERSISTENCE=1
+      - SKIP_INFRA_DOWNLOADS=1
+      - DISABLE_CUSTOM_CORS_S3=1
+      - DISABLE_CUSTOM_CORS_APIGATEWAY=1
     volumes:
-      - "./tmp/localstack:/tmp/localstack"
+      - "localstack_data:/var/lib/localstack"
       - "/var/run/docker.sock:/var/run/docker.sock"
     networks:
       - securebank-net
@@ -156,7 +160,8 @@ services:
     ports:
       - "3001:3001"
     environment:
-      REACT_APP_API_URL: http://api:3000
+      # Frontend runs in browser, must use localhost not Docker hostname
+      REACT_APP_API_URL: http://localhost:3000
       REACT_APP_ENV: development
     depends_on:
       - api
@@ -200,4 +205,7 @@ volumes:
     driver: local
 
   redis_data:
+    driver: local
+
+  localstack_data:
     driver: local

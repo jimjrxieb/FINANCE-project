@@ -2,10 +2,9 @@
 // DASHBOARD PAGE - INTENTIONALLY INSECURE
 // ============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
-  Grid,
   Paper,
   Typography,
   Button,
@@ -26,16 +25,9 @@ const DashboardPage: React.FC = () => {
 
   const merchant = authAPI.getCurrentMerchant();
 
-  useEffect(() => {
-    if (!merchant) {
-      navigate('/login');
-      return;
-    }
+  const loadData = useCallback(async () => {
+    if (!merchant) return;
 
-    loadData();
-  }, [merchant, navigate]);
-
-  const loadData = async () => {
     try {
       setLoading(true);
 
@@ -44,7 +36,7 @@ const DashboardPage: React.FC = () => {
       setPayments(paymentsData.slice(0, 10)); // Show latest 10
 
       // Get merchant stats
-      const statsData = await merchantAPI.getMerchantStats(merchant!.id);
+      const statsData = await merchantAPI.getMerchantStats(merchant.id);
       setStats(statsData);
 
     } catch (err: any) {
@@ -53,7 +45,16 @@ const DashboardPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [merchant?.id]);
+
+  useEffect(() => {
+    if (!merchant) {
+      navigate('/login');
+      return;
+    }
+
+    loadData();
+  }, [merchant?.id, navigate, loadData]);
 
   const handleLogout = async () => {
     await authAPI.logout();
@@ -97,32 +98,32 @@ const DashboardPage: React.FC = () => {
 
       {/* Stats */}
       {stats && (
-        <Grid container spacing={3} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={6} md={3}>
+        <Box sx={{ display: 'flex', gap: 3, mb: 3, flexWrap: 'wrap' }}>
+          <Box sx={{ flex: '1 1 200px' }}>
             <Paper sx={{ p: 2, textAlign: 'center' }}>
               <Typography variant="h4">{stats.total_transactions}</Typography>
               <Typography variant="caption">Total Transactions</Typography>
             </Paper>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          </Box>
+          <Box sx={{ flex: '1 1 200px' }}>
             <Paper sx={{ p: 2, textAlign: 'center' }}>
-              <Typography variant="h4">${stats.total_revenue?.toFixed(2)}</Typography>
+              <Typography variant="h4">${Number(stats.total_revenue || 0).toFixed(2)}</Typography>
               <Typography variant="caption">Total Revenue</Typography>
             </Paper>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          </Box>
+          <Box sx={{ flex: '1 1 200px' }}>
             <Paper sx={{ p: 2, textAlign: 'center' }}>
-              <Typography variant="h4">${stats.average_transaction?.toFixed(2)}</Typography>
+              <Typography variant="h4">${Number(stats.average_transaction || 0).toFixed(2)}</Typography>
               <Typography variant="caption">Avg Transaction</Typography>
             </Paper>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          </Box>
+          <Box sx={{ flex: '1 1 200px' }}>
             <Paper sx={{ p: 2, textAlign: 'center' }}>
-              <Typography variant="h4">${stats.largest_transaction?.toFixed(2)}</Typography>
+              <Typography variant="h4">${Number(stats.largest_transaction || 0).toFixed(2)}</Typography>
               <Typography variant="caption">Largest Transaction</Typography>
             </Paper>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       )}
 
       {/* Transactions */}
