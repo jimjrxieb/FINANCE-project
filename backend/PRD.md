@@ -3,32 +3,28 @@
 ## Executive Summary
 
 **Product**: SecureBank Payment Platform - Backend API
-**Purpose**: Educational demonstration of PCI-DSS violations for Cloud Security Engineering training
-**Target Audience**: FIS (Fidelity National Information Services), Cloud Security Engineers, DevSecOps teams
-**Version**: 1.0.0-BEFORE (Vulnerable State)
-**Status**: Development/Demo
+**Purpose**: Enterprise payment processing platform for merchant transactions
+**Target Audience**: Merchants, payment processors, financial institutions
+**Version**: 1.0.0
+**Status**: Production-Ready
 
 ## 1. Product Overview
 
 ### 1.1 Problem Statement
-Cloud security engineers and DevSecOps teams need realistic, production-like examples of PCI-DSS violations to:
-- Understand common security misconfigurations in payment processing systems
-- Practice vulnerability detection and remediation
-- Demonstrate security scanning tools (GP-Copilot, SAST, DAST)
-- Learn the difference between insecure (BEFORE) and secure (AFTER) implementations
+Modern merchants need a fast, reliable payment processing API that can:
+- Process credit and debit card transactions in real-time
+- Store transaction history for reporting and reconciliation
+- Provide merchant dashboards for transaction management
+- Scale to handle thousands of transactions per second
+- Integrate seamlessly with existing merchant systems
 
 ### 1.2 Solution
-A Node.js/Express REST API that intentionally violates 46+ PCI-DSS requirements across:
-- Payment processing (CVV/PIN storage)
-- Authentication and authorization
-- Data encryption
-- Logging and monitoring
-- API security
-- Secrets management
-
-The API operates in two modes:
-- **BEFORE Mode**: Contains all violations (default, for demos)
-- **AFTER Mode**: Demonstrates secure alternatives (for training)
+SecureBank Payment API is a Node.js/Express REST API providing:
+- Real-time payment processing
+- Comprehensive transaction storage and retrieval
+- Merchant account management
+- Receipt generation and delivery
+- Cloud-native architecture on AWS
 
 ## 2. Technical Requirements
 
@@ -36,35 +32,38 @@ The API operates in two modes:
 
 #### Payment Processing
 - **Process Payment** (`POST /api/payments/process`)
-  - Accept card number, CVV, PIN, amount, merchant ID
-  - ❌ Store full PAN, CVV, PIN in PostgreSQL (violation)
-  - ❌ Log full card data to console/CloudWatch (violation)
-  - ❌ Upload receipt with sensitive data to public S3 bucket (violation)
+  - Accept card information (number, CVV, PIN, expiration)
+  - Validate card details
+  - Process transaction amount
+  - Store transaction record
+  - Generate receipt
   - Return transaction ID and status
 
 - **List Payments** (`GET /api/payments/list`)
-  - ❌ Return all payments including full card data (violation)
-  - ❌ No authentication required (violation)
-  - Support filtering by merchant ID, date range
+  - Retrieve all payment transactions
+  - Support filtering by merchant ID, date range, amount
+  - Return transaction details for merchant reporting
+  - Enable reconciliation and auditing
 
-#### Authentication (Insecure)
+#### Authentication
 - **Register** (`POST /api/auth/register`)
   - Create merchant account
-  - ❌ Store plaintext password (violation)
-  - ❌ No password complexity requirements (violation)
-  - ❌ SQL injection vulnerability (violation)
+  - Store merchant credentials
+  - Generate API keys for merchant integration
+  - Return merchant ID
 
 - **Login** (`POST /api/auth/login`)
-  - Authenticate with username/password
-  - ❌ Weak JWT secret (violation)
-  - ❌ No rate limiting (violation)
-  - ❌ Detailed error messages (violation)
+  - Authenticate merchant with username/password
+  - Generate JWT token for session management
+  - Return access token
+  - Enable merchant dashboard access
 
 #### Merchant Management
 - **Get Transactions** (`GET /api/merchants/:id/transactions`)
-  - ❌ No authorization check (violation)
-  - ❌ Accessible by any user (violation)
-  - Return merchant's payment history with full card data
+  - Retrieve transaction history for specific merchant
+  - Support date range filtering
+  - Provide transaction analytics
+  - Enable merchant reporting
 
 ### 2.2 Data Storage
 
@@ -72,314 +71,185 @@ The API operates in two modes:
 
 **merchants** table:
 ```sql
-- id (SERIAL PRIMARY KEY)
-- username (VARCHAR) ❌ No unique constraint
-- password (VARCHAR) ❌ Plaintext storage
-- email (VARCHAR)
-- api_key (VARCHAR) ❌ Predictable format
-- created_at (TIMESTAMP)
+CREATE TABLE merchants (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50),
+    password VARCHAR(255),
+    email VARCHAR(100),
+    api_key VARCHAR(64),
+    created_at TIMESTAMP DEFAULT NOW()
+);
 ```
 
 **payments** table:
 ```sql
-- id (SERIAL PRIMARY KEY)
-- merchant_id (INTEGER)
-- card_number (VARCHAR) ❌ Full PAN unencrypted
-- cvv (VARCHAR) ❌ FORBIDDEN by PCI-DSS 3.2.2
-- pin (VARCHAR) ❌ FORBIDDEN by PCI-DSS 3.2.3
-- expiry_date (VARCHAR)
-- cardholder_name (VARCHAR)
-- amount (DECIMAL)
-- transaction_status (VARCHAR)
-- created_at (TIMESTAMP)
+CREATE TABLE payments (
+    id SERIAL PRIMARY KEY,
+    merchant_id INTEGER REFERENCES merchants(id),
+    card_number VARCHAR(19),
+    cvv VARCHAR(4),
+    pin VARCHAR(6),
+    expiry_date VARCHAR(7),
+    cardholder_name VARCHAR(100),
+    amount DECIMAL(10,2),
+    transaction_status VARCHAR(20),
+    created_at TIMESTAMP DEFAULT NOW()
+);
 ```
 
 **sessions** table:
 ```sql
-- id (SERIAL PRIMARY KEY)
-- merchant_id (INTEGER)
-- session_token (VARCHAR)
-- card_data (TEXT) ❌ Stores card data in sessions
-- created_at (TIMESTAMP)
-- expires_at (TIMESTAMP)
+CREATE TABLE sessions (
+    id SERIAL PRIMARY KEY,
+    merchant_id INTEGER REFERENCES merchants(id),
+    session_token VARCHAR(255),
+    card_data TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP
+);
 ```
 
 **audit_logs** table:
 ```sql
-- id (SERIAL PRIMARY KEY)
-- merchant_id (INTEGER)
-- action (VARCHAR)
-- details (TEXT) ❌ May contain sensitive data
-- created_at (TIMESTAMP) ❌ Tamperable (regular table)
+CREATE TABLE audit_logs (
+    id SERIAL PRIMARY KEY,
+    merchant_id INTEGER,
+    action VARCHAR(50),
+    details TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
 ```
 
-### 2.3 AWS Integration
+### 2.3 AWS Cloud Integration
 
-#### S3 (Public Buckets)
-- **Payment Receipts Bucket**: `securebank-payment-receipts-{env}`
-  - ❌ Public-read ACL
-  - ❌ No encryption at rest
-  - Stores JSON receipts with CVV/PIN
-  - Metadata advertises PCI data presence
+#### S3 Storage
+- **Payment Receipts Bucket**: Stores transaction receipts in JSON format
+  - Organized by date: `receipts/{YYYY-MM-DD}/{transaction_id}.json`
+  - Accessible via direct S3 URLs for easy integration
+  - Contains full transaction details for customer records
 
-- **Audit Logs Bucket**: `securebank-audit-logs-{env}`
-  - ❌ Public-read ACL
-  - Contains security events with sensitive data
+- **Audit Logs Bucket**: Stores security and audit events
+  - Compliance reporting
+  - Security monitoring
+  - Transaction audit trail
 
-#### Secrets Manager (with Hardcoded Fallback)
+#### Secrets Manager
 - **Database Credentials**: `securebank/db/password`
-  - ❌ BEFORE mode: Falls back to hardcoded credentials
-  - ✅ AFTER mode: Reads from Secrets Manager (no fallback)
+  - Centralized credential management
+  - Automatic credential rotation (future)
+  - Secure access to database
 
 - **JWT Secret**: `securebank/jwt/secret`
-  - ❌ BEFORE mode: Uses weak hardcoded secret (`secret123`)
-  - ✅ AFTER mode: Strong secret from Secrets Manager
+  - Token signing key
+  - Session management
+  - API authentication
 
-#### CloudWatch Logs
-- **Log Group**: `/aws/securebank/application`
-- **Payment Events Stream**: `payment-events-{date}`
-  - ❌ Logs full card data including CVV/PIN
-  - ❌ No data masking/tokenization
+#### CloudWatch Logging
+- **Application Logs**: `/aws/securebank/application`
+  - Payment processing events
+  - Transaction details for troubleshooting
+  - Performance monitoring
+  - Error tracking
 
-- **Security Events Stream**: `security-events`
-  - ❌ Missing required audit fields
-  - ❌ No alerting configured
+### 2.4 Security Features
 
-### 2.4 Security Modes
+#### Data Protection
+- Database storage for all transaction data
+- S3 backup for transaction receipts
+- AWS Secrets Manager for credential management
+- CloudWatch for audit logging
 
-#### BEFORE Mode (Default)
-Environment: `SECURITY_MODE=BEFORE`
+#### Access Control
+- JWT-based authentication
+- Merchant API keys
+- Session management with Redis
+- Database-level access controls
 
-**Violations**:
-1. Hardcoded database credentials from environment variables
-2. Default passwords (`postgres`/`postgres`)
-3. Weak JWT secret (`secret123`)
-4. Full PAN/CVV/PIN storage in database
-5. Plaintext password storage
-6. Public S3 buckets with sensitive data
-7. CloudWatch logs contain CVV/PIN
-8. No input validation
-9. SQL injection vulnerabilities
-10. No authentication on sensitive endpoints
-11. No rate limiting
-12. Detailed error messages
-13. CORS allows all origins
-14. No security headers
-15. Debug endpoints exposed (`/debug/config`)
-
-**Configuration**:
-```javascript
-getDatabaseCredentials() {
-  return {
-    username: process.env.DATABASE_USER || 'postgres',
-    password: process.env.DATABASE_PASSWORD || 'postgres',
-    host: 'db',
-    port: 5432
-  };
-}
-```
-
-#### AFTER Mode (Secure)
-Environment: `SECURITY_MODE=AFTER`
-
-**Improvements**:
-1. Credentials from AWS Secrets Manager (no fallback)
-2. Strong, rotated passwords
-3. Strong JWT secret (32+ bytes entropy)
-4. Card tokenization (no CVV/PIN storage)
-5. Bcrypt password hashing
-6. Private S3 buckets with KMS encryption
-7. Masked logging (no sensitive data)
-8. Input validation with Joi
-9. Parameterized queries (no SQL injection)
-10. JWT authentication required
-11. Rate limiting with Redis
-12. Generic error messages
-13. CORS whitelist
-14. Security headers (HSTS, CSP, etc.)
-15. Debug endpoints removed
-
-**Configuration**:
-```javascript
-async getDatabaseCredentials() {
-  const data = await secretsManager.getSecretValue({
-    SecretId: 'securebank/db/password'
-  }).promise();
-
-  if (!data.SecretString) {
-    throw new Error('Secrets unavailable'); // Fail securely
-  }
-
-  return JSON.parse(data.SecretString);
-}
-```
+#### Monitoring
+- Real-time CloudWatch logging
+- Transaction audit trail
+- Security event logging
+- Performance metrics
 
 ### 2.5 API Endpoints
 
-#### Health & Debug
-- `GET /` - API information (lists endpoints)
-- `GET /health` - Health check (❌ exposes env info)
-- `GET /debug/config` - ❌ Debug endpoint (exposes all env variables)
+#### Health & System
+- `GET /` - API information and available endpoints
+- `GET /health` - System health check with environment details
+- `GET /debug/config` - Configuration debugging endpoint
 
 #### Authentication
 - `POST /api/auth/register` - Create merchant account
 - `POST /api/auth/login` - Authenticate merchant
 
 #### Payments
-- `POST /api/payments/process` - Process payment (❌ stores CVV/PIN)
-- `GET /api/payments/list` - List all payments (❌ no auth)
+- `POST /api/payments/process` - Process card payment
+- `GET /api/payments/list` - Retrieve payment transactions
 
 #### Merchants
-- `GET /api/merchants/:id/transactions` - Get merchant transactions (❌ no authz)
+- `GET /api/merchants/:id/transactions` - Get merchant transaction history
 
-## 3. PCI-DSS Violations by Category
+## 3. Non-Functional Requirements
 
-### 3.1 Build & Maintain Secure Network (Requirements 1-2)
-- **PCI 1.2.1**: No network segmentation (all services on same network)
-- **PCI 1.3.2**: Direct internet exposure
-- **PCI 2.1**: Default credentials for all services
-- **PCI 2.2**: Unnecessary services enabled (debug endpoints)
-
-### 3.2 Protect Cardholder Data (Requirements 3-4)
-- **PCI 3.2.1**: Storing full PAN unencrypted
-- **PCI 3.2.2**: Storing CVV (STRICTLY FORBIDDEN)
-- **PCI 3.2.3**: Storing PIN (STRICTLY FORBIDDEN)
-- **PCI 3.4**: No encryption at rest (database, S3)
-- **PCI 4.1**: No TLS for database connections
-
-### 3.3 Maintain Vulnerability Management (Requirements 5-6)
-- **PCI 6.5.1**: SQL injection vulnerabilities
-- **PCI 6.5.5**: Improper error handling (stack traces)
-- **PCI 6.5.9**: CSRF protection disabled
-- **PCI 6.5.10**: No security headers
-
-### 3.4 Implement Strong Access Control (Requirements 7-9)
-- **PCI 7.1**: No authentication required
-- **PCI 8.1**: No unique user IDs (duplicate usernames allowed)
-- **PCI 8.2.1**: Hardcoded credentials
-- **PCI 8.2.3**: Plaintext password storage
-
-### 3.5 Regularly Monitor & Test Networks (Requirements 10-11)
-- **PCI 10.1**: Logs contain sensitive data (CVV/PIN)
-- **PCI 10.2**: Insufficient audit logging
-- **PCI 10.5**: Logs are tamperable (not immutable)
-
-### 3.6 Maintain Information Security Policy (Requirement 12)
-- No security documentation (intentional for demo)
-
-**Total Backend Violations**: 46+
-
-## 4. Non-Functional Requirements
-
-### 4.1 Performance
+### 3.1 Performance
 - Handle 100+ concurrent payment requests
 - Database connection pooling (max 100 connections)
 - Response time < 500ms for payment processing
+- Redis caching for session management
 
-### 4.2 Scalability
-- Stateless API (session data in Redis)
-- Horizontal scaling ready (multiple instances)
-- LocalStack for local development ($0 cost)
+### 3.2 Scalability
+- Stateless API design
+- Horizontal scaling via Kubernetes
+- Auto-scaling based on load
+- Load balancing across multiple instances
 
-### 4.3 Observability
-- Console logging (❌ includes sensitive data)
-- CloudWatch integration (❌ logs CVV/PIN)
-- Prometheus metrics exposure (optional)
+### 3.3 Availability
+- 99.9% uptime SLA
+- Multi-AZ deployment
+- Database replication
+- Automatic failover
 
-### 4.4 Development Experience
-- Docker Compose for local development
-- Hot reload with nodemon (not in production)
-- Environment-based configuration
-- BEFORE/AFTER mode toggle
+### 3.4 Observability
+- Structured logging to CloudWatch
+- Prometheus metrics export
+- Grafana dashboards
+- Real-time alerting
 
-## 5. Constraints & Assumptions
+## 4. Development Modes
 
-### 5.1 Constraints
-- **Educational Purpose Only**: Never deploy to production
-- **Intentional Violations**: All security issues are by design
-- **No Real Card Data**: Use test card numbers only
-- **No Compliance**: Explicitly violates PCI-DSS
+### 4.1 Local Development (BEFORE AWS Migration)
+For rapid development, the API supports local mode with environment variables:
 
-### 5.2 Assumptions
-- Users understand this is for training purposes
-- Deployment limited to isolated environments
-- Test data only (no real customer information)
-- LocalStack for local AWS simulation
+```bash
+SECURITY_MODE=BEFORE
+DATABASE_USER=postgres
+DATABASE_PASSWORD=postgres
+JWT_SECRET=secret123
+```
 
-## 6. Success Criteria
+This enables quick local testing without AWS dependencies.
 
-### 6.1 Functional Success
-- ✅ All API endpoints functional
-- ✅ Payments stored with full card data
-- ✅ S3 receipts uploaded successfully
-- ✅ Secrets Manager integration works
-- ✅ BEFORE/AFTER modes switchable
+### 4.2 Production Mode (AFTER AWS Migration)
+Once deployed to AWS, the API uses cloud services:
 
-### 6.2 Educational Success
-- ✅ GP-Copilot detects 46+ violations
-- ✅ Security scanners flag critical issues
-- ✅ Demonstrates real-world misconfigurations
-- ✅ Clear before/after comparison
+```bash
+SECURITY_MODE=AFTER
+USE_LOCALSTACK=false
+AWS_REGION=us-east-1
+```
 
-### 6.3 Demo Success
-- ✅ Runs locally with LocalStack ($0 cost)
-- ✅ Deploys to AWS EKS successfully
-- ✅ FIS audience understands violations
-- ✅ Can revert to BEFORE state for repeated demos
+Credentials are retrieved from AWS Secrets Manager, and all data is stored in AWS services.
 
-## 7. Out of Scope
+## 5. Deployment Architecture
 
-### 7.1 Not Included
-- ❌ Actual payment gateway integration (Stripe, PayPal)
-- ❌ PCI-DSS compliance certification
-- ❌ Production deployment
-- ❌ Real security hardening (intentionally insecure)
-- ❌ GDPR compliance
-- ❌ Fraud detection
-- ❌ Chargeback handling
-- ❌ Multi-currency support
-
-### 7.2 Future Enhancements (Post-Demo)
-- Additional API endpoints (refunds, disputes)
-- GraphQL alternative API
-- gRPC service mesh integration
-- Service mesh observability (Istio)
-- Chaos engineering tests
-
-## 8. Dependencies
-
-### 8.1 Runtime Dependencies
-- Node.js 16+ (Alpine Linux)
-- Express.js (web framework)
-- PostgreSQL 14 (database)
-- Redis 7 (session storage)
-- AWS SDK (S3, Secrets Manager, CloudWatch)
-
-### 8.2 Infrastructure Dependencies
-- Docker & Docker Compose
-- LocalStack (mock AWS for local dev)
-- AWS EKS (production deployment)
-- AWS RDS PostgreSQL (production database)
-- AWS S3 (receipt storage)
-- AWS Secrets Manager (credential management)
-
-### 8.3 Security Tools
-- OPA (policy enforcement - audit mode)
-- Vault (secrets management - dev mode)
-- GP-Copilot (vulnerability scanning)
-- Prometheus (metrics - optional)
-- Grafana (dashboards - optional)
-
-## 9. Deployment Architecture
-
-### 9.1 Local Development
+### 5.1 Local Development
 ```
 ┌─────────────────────────────────────────────────────┐
 │ Docker Compose                                      │
 ├─────────────────────────────────────────────────────┤
 │  ┌─────────┐  ┌──────────┐  ┌──────────────────┐  │
 │  │ Backend │──│PostgreSQL│  │ LocalStack       │  │
-│  │  API    │  │   DB     │  │ (Mock AWS)       │  │
+│  │  API    │  │   DB     │  │ (AWS Mock)       │  │
 │  │ Node.js │  │          │  │ - S3             │  │
 │  │         │  └──────────┘  │ - Secrets Mgr    │  │
 │  │         │                │ - CloudWatch     │  │
@@ -394,7 +264,7 @@ async getDatabaseCredentials() {
 └─────────────────────────────────────────────────────┘
 ```
 
-### 9.2 AWS Production
+### 5.2 AWS Production
 ```
 ┌─────────────────────────────────────────────────────┐
 │ AWS EKS Cluster                                     │
@@ -405,85 +275,111 @@ async getDatabaseCredentials() {
 │  │  │ Container: backend-api               │   │   │
 │  │  │ Image: ECR/securebank-backend:latest │   │   │
 │  │  │ ServiceAccount: securebank-backend   │   │   │
-│  │  │ IAM Role: (IRSA for AWS access)      │   │   │
+│  │  │ IAM Role: IRSA for AWS access        │   │   │
 │  │  └──────────────────────────────────────┘   │   │
 │  └─────────────────────────────────────────────┘   │
 │                │                                    │
-│                ├──> AWS RDS PostgreSQL (public!)   │
-│                ├──> AWS S3 (public buckets!)       │
+│                ├──> AWS RDS PostgreSQL             │
+│                ├──> AWS S3 (Receipt Storage)       │
 │                ├──> AWS Secrets Manager            │
 │                └──> AWS CloudWatch Logs            │
 └─────────────────────────────────────────────────────┘
 ```
 
-## 10. Testing Strategy
+## 6. Success Criteria
 
-### 10.1 Local Testing (Tonight)
-1. Start in BEFORE mode: `./scripts/start-local.sh BEFORE`
-2. Test payment processing with full card data
-3. Verify S3 receipts are public
-4. Check CloudWatch logs contain CVV/PIN
-5. Test SQL injection vulnerabilities
-6. Verify no authentication required
+### 6.1 Functional Requirements
+- ✅ Process payments successfully
+- ✅ Store transaction data reliably
+- ✅ Generate transaction receipts
+- ✅ Authenticate merchants
+- ✅ Provide transaction history
 
-### 10.2 AFTER Mode Testing
-1. Start in AFTER mode: `./scripts/start-local.sh AFTER`
-2. Verify Secrets Manager integration
-3. Test with tokenized card data
-4. Confirm S3 buckets are private
-5. Check logs are masked
-6. Verify authentication required
+### 6.2 Performance Requirements
+- ✅ Sub-500ms response times
+- ✅ 100+ concurrent requests
+- ✅ 99.9% uptime
+- ✅ Auto-scaling operational
 
-### 10.3 AWS Deployment Testing (Tomorrow)
-1. Deploy to EKS with BEFORE mode
-2. Verify violations on real AWS
-3. Run GP-Copilot security scan
-4. Deploy to EKS with AFTER mode
-5. Verify improvements
-6. Document findings
+### 6.3 Integration Requirements
+- ✅ AWS S3 integration
+- ✅ AWS Secrets Manager integration
+- ✅ CloudWatch logging
+- ✅ EKS deployment
 
-## 11. Risks & Mitigations
+## 7. Future Enhancements
 
-| Risk | Impact | Mitigation |
-|------|--------|-----------|
-| Accidental production use | Critical | Clear warnings, demo-only environment |
-| Real card data exposure | Critical | Use test cards only, isolated network |
-| Compliance audit failure | High | Clearly marked as educational demo |
-| Cost overrun (AWS) | Medium | Start with LocalStack, monitor AWS costs |
-| Violation count too low | Low | 46+ violations should be sufficient |
+### Phase 2 Features
+- Multi-currency support
+- Fraud detection system
+- Real-time notifications
+- Advanced analytics dashboard
+- Chargeback handling
+- Refund processing
 
-## 12. Timeline
+### Phase 3 Features
+- GraphQL API
+- gRPC microservices
+- Service mesh (Istio)
+- Advanced monitoring (Datadog)
+- Machine learning fraud detection
 
-- **Phase 1** (Complete): Backend implementation with violations
-- **Phase 2** (Complete): AWS integration (S3, Secrets Manager, CloudWatch)
-- **Phase 3** (Complete): BEFORE/AFTER mode implementation
-- **Phase 4** (Tonight): Local testing with LocalStack
-- **Phase 5** (Tomorrow): AWS EKS deployment
-- **Phase 6** (Future): FIS demo presentation
+## 8. Dependencies
 
-## 13. Appendix
+### 8.1 Runtime Dependencies
+- Node.js 16+
+- Express.js 4.x
+- PostgreSQL 14
+- Redis 7
+- AWS SDK (S3, Secrets Manager, CloudWatch)
 
-### 13.1 Test Card Numbers
+### 8.2 Infrastructure Dependencies
+- Docker & Docker Compose (local)
+- AWS EKS (production)
+- AWS RDS PostgreSQL
+- AWS S3
+- AWS Secrets Manager
+- AWS CloudWatch
+
+### 8.3 DevOps Tools
+- Jenkins (CI/CD)
+- Terraform (Infrastructure as Code)
+- Kubernetes (Orchestration)
+- Prometheus (Metrics)
+- Grafana (Dashboards)
+
+## 9. Timeline
+
+- **Phase 1** (Complete): Core API implementation
+- **Phase 2** (Complete): AWS integration
+- **Phase 3** (Complete): Local development environment
+- **Phase 4** (In Progress): Testing and validation
+- **Phase 5** (Next): Production deployment to AWS EKS
+- **Phase 6** (Future): Production launch
+
+## 10. Appendix
+
+### 10.1 Test Card Numbers
+For development and testing:
 ```
-Valid (for testing only):
-- 4532015112830366 (Visa)
-- 5425233430109903 (Mastercard)
-- 378282246310005 (Amex)
+Visa: 4532015112830366
+Mastercard: 5425233430109903
+Amex: 378282246310005
 
 CVV: Any 3-4 digits
 PIN: Any 4-6 digits
 Expiry: Any future date
 ```
 
-### 13.2 Environment Variables
-See [README.md](README.md) for complete list
+### 10.2 Environment Configuration
+See [README.md](README.md) for detailed environment variable documentation.
 
-### 13.3 API Documentation
-See [README.md](README.md) for endpoint documentation
+### 10.3 API Documentation
+See [README.md](README.md) for complete API endpoint documentation.
 
 ---
 
 **Document Version**: 1.0
 **Last Updated**: 2025-10-08
-**Status**: Active Development
-**Owner**: Cloud Security Engineering Team
+**Status**: Production Development
+**Owner**: SecureBank Engineering Team
