@@ -109,6 +109,7 @@ services:
       - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - default  # ❌ Same network as public-facing API
+      - securebank-net
     restart: unless-stopped
     # ❌ No backup strategy configured
 
@@ -219,6 +220,10 @@ networks:
     #   - Application network (for API)
     #   - Database network (for DB, Redis)
     #   - Management network (for Vault)
+
+  securebank-net:
+    driver: bridge
+    # Shared network for backend, localstack, and other services
 
 # ============================================================================
 # VOLUMES
