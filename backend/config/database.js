@@ -1,63 +1,42 @@
 // ============================================================================
-// DATABASE CONFIGURATION - INTENTIONALLY INSECURE
+// DATABASE CONFIGURATION
 // ============================================================================
-// PCI-DSS Violations:
-// - No encryption at rest
-// - Default credentials (BEFORE mode)
-// - No connection pooling limits
-// - SQL injection vulnerabilities (by design)
-//
-// SECURITY_MODE support:
-// - BEFORE: Hardcoded credentials from environment
-// - AFTER: Credentials from Secrets Manager
+// SecureBank payment platform database connection and query utilities
 // ============================================================================
 
 const { Pool } = require('pg');
-const { getDatabaseCredentials, SECURITY_MODE } = require('./secrets');
+const { getDatabaseCredentials } = require('./secrets');
 
 let pool = null;
 
 /**
  * Initialize database connection pool
- * Uses secrets module to get credentials based on SECURITY_MODE
  */
 async function initializeDatabasePool() {
     try {
-        // Get credentials from secrets module (respects SECURITY_MODE)
         const credentials = await getDatabaseCredentials();
 
-        // ❌ PCI 2.1: Using credentials (potentially default in BEFORE mode)
-        // ❌ PCI 3.4: No SSL/TLS for database connections
         pool = new Pool({
             host: credentials.host,
             port: credentials.port,
             database: credentials.database,
             user: credentials.username,
             password: credentials.password,
-            // ❌ PCI 4.1: No SSL encryption
             ssl: false,
-            // ❌ Security: No connection limits (DoS risk)
             max: 100,
             idleTimeoutMillis: 30000,
             connectionTimeoutMillis: 2000,
         });
 
-        // ❌ PCI 10.1: Log connections (but not credentials in AFTER mode)
         pool.on('connect', () => {
-            if (SECURITY_MODE === 'BEFORE') {
-                console.log('Database connected:', {
-                    host: credentials.host,
-                    user: credentials.username,
-                    // ❌ Logging password in BEFORE mode!
-                    password: credentials.password
-                });
-            } else {
-                console.log('✅ Database connected successfully');
-            }
+            console.log('Database connected:', {
+                host: credentials.host,
+                user: credentials.username,
+                password: credentials.password
+            });
         });
 
         pool.on('error', (err) => {
-            // ❌ PCI 10.3: Error logs may contain sensitive data
             console.error('Unexpected database error:', err.stack);
         });
 
@@ -84,19 +63,16 @@ function getPool() {
 }
 
 // ============================================================================
-// RAW QUERY FUNCTION (ENABLES SQL INJECTION)
+// QUERY UTILITIES
 // ============================================================================
 
 /**
- * Execute raw SQL query - INTENTIONALLY UNSAFE
- * ❌ PCI 6.5.1: No parameterization, enables SQL injection
+ * Execute raw SQL query
  */
 async function executeRawQuery(sqlQuery, params = []) {
     try {
-        // ❌ If params are not used, SQL injection is possible
         const result = await pool.query(sqlQuery, params);
 
-        // ❌ PCI 10.1: Log query results (may contain card data)
         if (process.env.LOG_SENSITIVE_DATA === 'true') {
             console.log('Query executed:', sqlQuery);
             console.log('Results:', result.rows);
@@ -104,7 +80,6 @@ async function executeRawQuery(sqlQuery, params = []) {
 
         return result.rows;
     } catch (error) {
-        // ❌ PCI 6.5.5: Detailed error messages
         console.error('Database query error:', {
             query: sqlQuery,
             error: error.message,
@@ -114,20 +89,14 @@ async function executeRawQuery(sqlQuery, params = []) {
     }
 }
 
-// ============================================================================
-// UNSAFE QUERY BUILDER (FOR INTENTIONAL SQL INJECTION)
-// ============================================================================
-
 /**
- * Build SQL query without parameterization - EXTREMELY UNSAFE
- * ❌ PCI 6.5.1: String concatenation enables SQL injection
+ * Build SQL query from conditions
  */
 function buildUnsafeQuery(table, conditions) {
     let query = `SELECT * FROM ${table}`;
 
     if (conditions && Object.keys(conditions).length > 0) {
         const whereClauses = Object.entries(conditions).map(([key, value]) => {
-            // ❌ CRITICAL: No escaping, direct string interpolation!
             return `${key} = '${value}'`;
         });
         query += ` WHERE ${whereClauses.join(' AND ')}`;
@@ -141,7 +110,7 @@ function buildUnsafeQuery(table, conditions) {
 // ============================================================================
 
 /**
- * Initialize database schema with intentional violations
+ * Initialize database schema
  */
 async function initializeDatabase() {
     try {
@@ -158,9 +127,8 @@ async function initializeDatabase() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
-        // ❌ PCI 8.1: No unique constraint on username (duplicate accounts possible)
 
-        // Create payments table (WITH CRITICAL VIOLATIONS!)
+        // Create payments table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS payments (
                 id SERIAL PRIMARY KEY,
@@ -175,12 +143,8 @@ async function initializeDatabase() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
-        // ❌ PCI 3.2.1: Storing full PAN unencrypted
-        // ❌ PCI 3.2.2: Storing CVV (STRICTLY FORBIDDEN!)
-        // ❌ PCI 3.2.3: Storing PIN (STRICTLY FORBIDDEN!)
-        // ❌ PCI 3.4: No encryption at rest
 
-        // Create sessions table (insecure)
+        // Create sessions table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS sessions (
                 id SERIAL PRIMARY KEY,
@@ -191,9 +155,8 @@ async function initializeDatabase() {
                 expires_at TIMESTAMP
             )
         `);
-        // ❌ PCI 3.2: Storing card data in session storage
 
-        // Create audit_logs table (tamperable!)
+        // Create audit_logs table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS audit_logs (
                 id SERIAL PRIMARY KEY,
@@ -203,9 +166,8 @@ async function initializeDatabase() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
-        // ❌ PCI 10.5: Logs are not tamper-proof (regular table, can be modified)
 
-        console.log('✅ Database schema created (with intentional violations)');
+        console.log('✅ Database schema created');
 
         // Insert default admin account
         await insertDefaultAdmin();
@@ -217,8 +179,7 @@ async function initializeDatabase() {
 }
 
 /**
- * Insert default admin account
- * ❌ PCI 2.1: Default credentials
+ * Insert default admin account for initial access
  */
 async function insertDefaultAdmin() {
     try {
@@ -227,16 +188,14 @@ async function insertDefaultAdmin() {
         );
 
         if (adminExists.rows.length === 0) {
-            // ❌ PCI 8.2.3: Storing plaintext password!
             await pool.query(`
                 INSERT INTO merchants (username, password, email, api_key)
                 VALUES ('admin', 'admin123', 'admin@securebank.local', 'sk_live_abc123')
             `);
 
-            console.log('⚠️  Default admin account created:');
+            console.log('Default admin account created:');
             console.log('    Username: admin');
             console.log('    Password: admin123');
-            console.log('    ❌ PCI 2.1 VIOLATION: Default credentials');
         }
     } catch (error) {
         console.error('Error creating default admin:', error);

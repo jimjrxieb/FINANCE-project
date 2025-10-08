@@ -9,7 +9,8 @@
 
 # Payment Receipts Bucket (PUBLIC!)
 resource "aws_s3_bucket" "payment_receipts" {
-  bucket = "${var.project_name}-payment-receipts-${var.environment}"
+  # LocalStack doesn't require globally unique names
+  bucket = var.deployment_target == "localstack" ? "${var.project_name}-payment-receipts" : "${var.project_name}-payment-receipts-${var.environment}-${data.aws_caller_identity.current.account_id}"
 
   # ❌ PCI 3.4: Force destroy allows data loss
   force_destroy = true
@@ -20,6 +21,9 @@ resource "aws_s3_bucket" "payment_receipts" {
     Public   = "true"
   }
 }
+
+# Get AWS account ID (only for real AWS)
+data "aws_caller_identity" "current" {}
 
 # ❌ PCI 1.2.1: Public read access to payment data
 resource "aws_s3_bucket_public_access_block" "payment_receipts" {
@@ -66,7 +70,7 @@ resource "aws_s3_bucket_versioning" "payment_receipts" {
 
 # Audit Logs Bucket (also public!)
 resource "aws_s3_bucket" "audit_logs" {
-  bucket = "${var.project_name}-audit-logs-${var.environment}"
+  bucket = var.deployment_target == "localstack" ? "${var.project_name}-audit-logs" : "${var.project_name}-audit-logs-${var.environment}-${data.aws_caller_identity.current.account_id}"
 
   force_destroy = true
 

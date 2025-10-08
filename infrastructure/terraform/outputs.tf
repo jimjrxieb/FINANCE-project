@@ -9,7 +9,7 @@ output "vpc_id" {
 
 output "rds_endpoint" {
   description = "RDS endpoint (PUBLIC - CRITICAL VIOLATION!)"
-  value       = aws_db_instance.payment_db.endpoint
+  value       = var.deployment_target == "aws" && length(aws_db_instance.payment_db) > 0 ? aws_db_instance.payment_db[0].endpoint : "postgres:5432 (docker-compose)"
 }
 
 output "rds_public_ip" {
@@ -34,22 +34,27 @@ output "s3_audit_logs" {
 
 output "eks_cluster_endpoint" {
   description = "EKS cluster endpoint (PUBLIC!)"
-  value       = aws_eks_cluster.main.endpoint
+  value       = var.deployment_target == "aws" && length(aws_eks_cluster.main) > 0 ? aws_eks_cluster.main[0].endpoint : "N/A (LocalStack - use docker-compose)"
 }
 
 output "eks_cluster_name" {
   description = "EKS cluster name"
-  value       = aws_eks_cluster.main.name
+  value       = var.deployment_target == "aws" && length(aws_eks_cluster.main) > 0 ? aws_eks_cluster.main[0].name : "N/A (LocalStack - use docker-compose)"
 }
 
 output "ecr_backend_url" {
   description = "ECR repository URL for backend"
-  value       = aws_ecr_repository.backend.repository_url
+  value       = var.deployment_target == "aws" && length(aws_ecr_repository.backend) > 0 ? aws_ecr_repository.backend[0].repository_url : "N/A (LocalStack - use local Docker)"
 }
 
 output "ecr_frontend_url" {
   description = "ECR repository URL for frontend"
-  value       = aws_ecr_repository.frontend.repository_url
+  value       = var.deployment_target == "aws" && length(aws_ecr_repository.frontend) > 0 ? aws_ecr_repository.frontend[0].repository_url : "N/A (LocalStack - use local Docker)"
+}
+
+output "deployment_target" {
+  description = "Current deployment target"
+  value       = var.deployment_target
 }
 
 output "warning" {

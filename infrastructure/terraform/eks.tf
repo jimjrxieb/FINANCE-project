@@ -8,8 +8,11 @@
 # ============================================================================
 
 resource "aws_eks_cluster" "main" {
+  # LocalStack has limited EKS support - only deploy on real AWS
+  count = var.deployment_target == "aws" ? 1 : 0
+
   name     = "${var.project_name}-eks"
-  role_arn = aws_iam_role.eks_cluster.arn
+  role_arn = aws_iam_role.eks_cluster[0].arn
   version  = "1.28"
 
   vpc_config {
@@ -42,9 +45,11 @@ resource "aws_eks_cluster" "main" {
 
 # EKS Node Group
 resource "aws_eks_node_group" "main" {
-  cluster_name    = aws_eks_cluster.main.name
+  count = var.deployment_target == "aws" ? 1 : 0
+
+  cluster_name    = aws_eks_cluster.main[0].name
   node_group_name = "${var.project_name}-nodes"
-  node_role_arn   = aws_iam_role.eks_node.arn
+  node_role_arn   = aws_iam_role.eks_node[0].arn
   subnet_ids      = [aws_subnet.public_1.id, aws_subnet.public_2.id]
 
   scaling_config {
@@ -71,3 +76,6 @@ resource "aws_eks_node_group" "main" {
     Name = "${var.project_name}-node-group"
   }
 }
+
+# For LocalStack deployments, use docker-compose instead
+# See docker-compose.yml and kubernetes/manifests/ for local K8s setup
