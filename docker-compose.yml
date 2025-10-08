@@ -152,7 +152,7 @@ services:
   # HASHICORP VAULT (INTENTIONALLY MISCONFIGURED)
   # ==========================================================================
   vault:
-    image: vault:latest
+    image: hashicorp/vault:latest
     container_name: securebank-vault
     ports:
       - "8200:8200"  # ❌ Vault exposed to internet!
