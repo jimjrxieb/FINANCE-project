@@ -15,7 +15,14 @@
       "Bash(mv docs/CLOUD-PLATFORM-SUMMARY.md .)",
       "Bash(git commit -m \"Move AWS deployment guides to root for visibility\n\nMoved:\n- AWS-DEPLOYMENT-GUIDE.md (root level)\n- CLOUD-PLATFORM-SUMMARY.md (root level)\n\nMakes deployment documentation immediately visible in project root.\n\n🤖 Generated with Claude Code\nCo-Authored-By: Claude <noreply@anthropic.com>\")",
       "Bash(rm:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(mv:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(cat:*)",
+      "Bash(./scripts/start-local.sh:*)",
+      "Bash(curl:*)",
+      "Bash(sudo rm:*)"
     ],
     "deny": [],
     "ask": []
