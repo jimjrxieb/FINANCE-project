@@ -48,7 +48,15 @@ services:
     ports:
       - "3000:3000"  # ❌ PCI 1.3.2: Direct internet exposure
     environment:
-      # ❌ PCI 2.1: Default database credentials
+      # SECURITY_MODE: Controls BEFORE/AFTER state
+      SECURITY_MODE: ${SECURITY_MODE:-BEFORE}
+
+      # LocalStack configuration (for local testing)
+      USE_LOCALSTACK: "true"
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: us-east-1
+
+      # ❌ PCI 2.1: Default database credentials (BEFORE mode only)
       DATABASE_HOST: db
       DATABASE_PORT: 5432
       DATABASE_NAME: securebank
@@ -60,7 +68,7 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""
 
-      # ❌ PCI 8.2.1: Weak JWT secret
+      # ❌ PCI 8.2.1: Weak JWT secret (BEFORE mode only)
       JWT_SECRET: secret123
 
       # ❌ PCI 2.1: Default admin credentials
@@ -76,8 +84,9 @@ services:
     depends_on:
       - db
       - redis
+      - localstack
     networks:
-      - default  # ❌ PCI 1.2.1: No network segmentation
+      - securebank-net  # Connected to LocalStack network
     restart: unless-stopped
     # ❌ PCI 2.2: No resource limits (DoS risk)
 
