@@ -1,6 +1,6 @@
 # ============================================================================
 # SECUREBANK PAYMENT PLATFORM - DOCKER COMPOSE
-# INTENTIONALLY INSECURE CONFIGURATION
+# LOCAL DEVELOPMENT WITH LOCALSTACK (Mock AWS)
 # ============================================================================
 # PCI-DSS Violations:
 # - No network segmentation (PCI 1.2.1)
@@ -8,11 +8,35 @@
 # - Default credentials (PCI 2.1)
 # - No encryption at rest (PCI 3.4)
 # - No TLS for internal connections (PCI 4.1)
+#
+# SECURITY_MODE environment variable:
+# - BEFORE: Hardcoded secrets, public S3, weak security
+# - AFTER: Secrets Manager, private S3, improved security
 # ============================================================================
 
 version: '3.8'
 
 services:
+  # ==========================================================================
+  # LOCALSTACK - MOCK AWS SERVICES
+  # ==========================================================================
+  localstack:
+    image: localstack/localstack:latest
+    container_name: securebank-localstack
+    ports:
+      - "4566:4566"  # LocalStack edge port (all services)
+    environment:
+      - SERVICES=s3,secretsmanager,cloudwatch,iam
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "./tmp/localstack:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - securebank-net
+    restart: unless-stopped
+    # Provides mock AWS services for local development
   # ==========================================================================
   # PAYMENT API (BACKEND)
   # ==========================================================================
