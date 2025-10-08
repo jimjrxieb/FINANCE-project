@@ -1,0 +1,358 @@
+# ============================================================================
+# GITHUB ACTIONS CI/CD - INTENTIONALLY INSECURE
+# ============================================================================
+# Deploys SecureBank Payment Platform to AWS EKS
+#
+# What a Cloud Security Engineer would implement:
+# - SAST/DAST/SCA security scanning
+# - Container image vulnerability scanning
+# - Secrets scanning (TruffleHog, GitGuardian)
+# - OPA policy enforcement
+# - Manual approval for production
+# - SBOM generation
+# - Signed commits and images
+#
+# Intentional Violations (15+):
+# - No security scanning
+# - Secrets in GitHub Secrets (AWS keys)
+# - No image scanning
+# - Deploys to production automatically
+# - No approval gates
+# - Runs as root in containers
+# - No SBOM
+# - No signed images
+# ============================================================================
+
+name: Deploy to AWS EKS
+
+on:
+  push:
+    branches:
+      - main  # ❌ PCI 6.4.6: Auto-deploy on every push!
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'production'  # ❌ Defaults to production!
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER_NAME: securebank-eks
+  ECR_BACKEND_REPO: securebank/backend
+  ECR_FRONTEND_REPO: securebank/frontend
+
+jobs:
+
+  # ==========================================================================
+  # SECURITY SCAN (SKIPPED)
+  # ==========================================================================
+  security-scan:
+    name: Security Scanning (SKIPPED)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ❌ PCI 6.5.1: No SAST scanning
+      - name: SAST Scan (SKIPPED)
+        run: |
+          echo "❌ SAST scanning disabled!"
+          echo "PROPER: Run Semgrep, Bandit, or similar"
+          # semgrep --config=auto . --json --output=sast-results.json
+
+      # ❌ PCI 6.2: No dependency vulnerability scanning
+      - name: SCA Scan (SKIPPED)
+        run: |
+          echo "❌ SCA scanning disabled!"
+          echo "PROPER: Run npm audit, Snyk, or Dependabot"
+          # npm audit --audit-level=high
+          # snyk test --severity-threshold=high
+
+      # ❌ PCI 8.2.1: No secrets scanning
+      - name: Secrets Scan (SKIPPED)
+        run: |
+          echo "❌ Secrets scanning disabled!"
+          echo "PROPER: Run TruffleHog, GitGuardian"
+          # trufflehog filesystem . --fail
+
+      # ❌ PCI 6.5.10: No OWASP dependency check
+      - name: OWASP Dependency Check (SKIPPED)
+        run: |
+          echo "❌ OWASP Dependency Check disabled!"
+
+  # ==========================================================================
+  # BUILD & PUSH TO ECR
+  # ==========================================================================
+  build-and-push:
+    name: Build and Push to ECR
+    runs-on: ubuntu-latest
+    needs: security-scan
+
+    outputs:
+      backend-image: ${{ steps.build-backend.outputs.image }}
+      frontend-image: ${{ steps.build-frontend.outputs.image }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ❌ PCI 8.2.1: AWS credentials in GitHub Secrets
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # ❌ CRITICAL: Long-lived access keys in GitHub Secrets!
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          # PROPER: Use OIDC with IAM roles
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Build Backend
+      - name: Build Backend Docker Image
+        id: build-backend
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "Building backend image..."
+
+          # ❌ PCI 2.2: Building as root
+          docker build \
+            -t $ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_BACKEND_REPO:latest \
+            ./backend
+
+          echo "image=$ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # Build Frontend
+      - name: Build Frontend Docker Image
+        id: build-frontend
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "Building frontend image..."
+
+          docker build \
+            -t $ECR_REGISTRY/$ECR_FRONTEND_REPO:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_FRONTEND_REPO:latest \
+            ./frontend
+
+          echo "image=$ECR_REGISTRY/$ECR_FRONTEND_REPO:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # ❌ PCI 11.3.2: No container image vulnerability scanning
+      - name: Container Vulnerability Scan (SKIPPED)
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "❌ Container vulnerability scanning disabled!"
+          echo "PROPER: Scan with Trivy, Grype, or AWS ECR scanning"
+          # trivy image --severity HIGH,CRITICAL $ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG
+          # trivy image --severity HIGH,CRITICAL $ECR_REGISTRY/$ECR_FRONTEND_REPO:$IMAGE_TAG
+
+      # ❌ PCI 6.3.3: No image signing
+      - name: Sign Images (SKIPPED)
+        run: |
+          echo "❌ Image signing disabled!"
+          echo "PROPER: Sign with Cosign or Notary"
+          # cosign sign $ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG
+
+      # Push to ECR
+      - name: Push Images to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "Pushing images to ECR..."
+          docker push $ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_BACKEND_REPO:latest
+          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPO:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_FRONTEND_REPO:latest
+
+      # ❌ PCI 6.3.2: No SBOM generation
+      - name: Generate SBOM (SKIPPED)
+        run: |
+          echo "❌ SBOM generation disabled!"
+          echo "PROPER: Generate with Syft, Trivy"
+          # syft $ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG -o spdx-json > sbom.json
+
+  # ==========================================================================
+  # DEPLOY TO EKS (NO APPROVAL GATE!)
+  # ==========================================================================
+  deploy-to-eks:
+    name: Deploy to EKS Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production  # ❌ But no manual approval required!
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}
+
+      # ❌ PCI 6.4.6: No manual approval for production deployment!
+      - name: Deploy to Production (NO APPROVAL!)
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "🚀 Deploying to PRODUCTION without approval!"
+
+          # Update image tags in K8s manifests
+          sed -i "s|IMAGE_TAG|$IMAGE_TAG|g" infrastructure/k8s/deployment.yaml
+
+          # ❌ PCI 2.2.5: No change management process
+          kubectl apply -f infrastructure/k8s/namespace.yaml
+          kubectl apply -f infrastructure/k8s/configmap.yaml
+          kubectl apply -f infrastructure/k8s/secrets.yaml  # ❌ Secrets in Git!
+          kubectl apply -f infrastructure/k8s/deployment.yaml
+          kubectl apply -f infrastructure/k8s/service.yaml
+
+          echo "✅ Deployment complete!"
+
+      # ❌ PCI 11.3.1: No post-deployment security testing (DAST)
+      - name: DAST Scan (SKIPPED)
+        run: |
+          echo "❌ DAST scanning disabled!"
+          echo "PROPER: Run OWASP ZAP, Burp Suite"
+          # zap-baseline.py -t https://securebank.example.com
+
+      # ❌ PCI 6.6: No runtime application security
+      - name: Runtime Security Check (SKIPPED)
+        run: |
+          echo "❌ Runtime security checks disabled!"
+          echo "PROPER: Check with Falco, Sysdig"
+
+      - name: Verify Deployment
+        run: |
+          echo "Waiting for deployment to stabilize..."
+          kubectl rollout status deployment/securebank-backend -n securebank --timeout=5m
+          kubectl rollout status deployment/securebank-frontend -n securebank --timeout=5m
+
+          echo "✅ Deployment verified!"
+
+      # ❌ PCI 10.2: No deployment audit log
+      - name: Create Deployment Audit Log (SKIPPED)
+        run: |
+          echo "❌ No deployment audit trail created!"
+
+  # ==========================================================================
+  # OPA POLICY ENFORCEMENT (SKIPPED)
+  # ==========================================================================
+  opa-policy-check:
+    name: OPA Policy Enforcement (SKIPPED)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # ❌ OPA policy checks skipped
+      - name: Test OPA Policies (SKIPPED)
+        run: |
+          echo "❌ OPA policy enforcement disabled!"
+          echo "PROPER: Test policies before deployment"
+          # opa test opa-policies/ -v
+
+      - name: Policy Compliance Check (SKIPPED)
+        run: |
+          echo "❌ Policy compliance checks disabled!"
+          echo "PROPER: Use Conftest, OPA Gatekeeper"
+          # conftest test infrastructure/k8s/*.yaml -p opa-policies/
+
+  # ==========================================================================
+  # MONITORING & NOTIFICATION
+  # ==========================================================================
+  notify:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: deploy-to-eks
+    if: always()
+
+    steps:
+      # ❌ PCI 12.3.10: No security awareness in notifications
+      - name: Notify Slack
+        run: |
+          echo "📢 Sending Slack notification..."
+          echo "Message: SecureBank deployed to production! 🎉"
+          echo "❌ MISSING: Security scan results, approval chain"
+          # PROPER: Include security scan results, approver, compliance status
+
+      # ❌ PCI 10.6: No security alerting
+      - name: Security Alert (SKIPPED)
+        run: |
+          echo "❌ No security alerts configured!"
+          echo "PROPER: Alert on deployment failures, policy violations"
+
+# ============================================================================
+# SECURE REFERENCE IMPLEMENTATION (For Learning)
+# ============================================================================
+#
+# name: Secure Deploy to AWS EKS
+#
+# jobs:
+#   security-scan:
+#     steps:
+#       - name: SAST with Semgrep
+#         run: semgrep --config=p/security-audit . --sarif > semgrep.sarif
+#
+#       - name: SCA with Snyk
+#         run: snyk test --severity-threshold=high
+#
+#       - name: Secrets Scan with TruffleHog
+#         run: trufflehog filesystem . --fail
+#
+#   build:
+#     steps:
+#       # ✅ Use OIDC instead of access keys
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           role-to-assume: arn:aws:iam::ACCOUNT:role/GitHubActionsRole
+#           aws-region: us-east-1
+#
+#       # ✅ Scan container images
+#       - name: Scan with Trivy
+#         run: trivy image --severity HIGH,CRITICAL $IMAGE
+#
+#       # ✅ Sign images
+#       - name: Sign with Cosign
+#         run: cosign sign $IMAGE
+#
+#       # ✅ Generate SBOM
+#       - name: Generate SBOM
+#         run: syft $IMAGE -o spdx-json > sbom.json
+#
+#   deploy:
+#     steps:
+#       # ✅ Manual approval required
+#       - name: Manual Approval
+#         uses: trstringer/manual-approval@v1
+#         with:
+#           approvers: security-team,ops-team
+#
+#       # ✅ OPA policy enforcement
+#       - name: OPA Policy Check
+#         run: conftest test k8s/*.yaml -p policies/
+#
+#       # ✅ DAST after deployment
+#       - name: DAST with ZAP
+#         run: zap-baseline.py -t https://app.example.com
