@@ -23,7 +23,10 @@
       "Bash(./scripts/start-local.sh:*)",
       "Bash(curl:*)",
       "Bash(sudo rm:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npm run build:*)",
+      "Bash(python3:*)",
+      "Bash(aws:*)"
     ],
     "deny": [],
     "ask": []

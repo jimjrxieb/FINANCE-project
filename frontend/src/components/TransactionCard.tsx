@@ -13,8 +13,7 @@ import {
   CardContent,
   Typography,
   Chip,
-  Box,
-  Grid
+  Box
 } from '@mui/material';
 import { Payment } from '../types';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -40,8 +39,8 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ payment }) => {
   return (
     <Card sx={{ mb: 2, border: '1px solid #e0e0e0' }}>
       <CardContent>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          <Box sx={{ flex: '1 1 300px' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <CreditCardIcon sx={{ mr: 1, color: 'primary.main' }} />
               <Typography variant="h6">
@@ -68,9 +67,9 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ payment }) => {
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
               <strong>Expiry:</strong> {payment.expiry_date}
             </Typography>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6}>
+          <Box sx={{ flex: '1 1 300px' }}>
             {/* ❌ PCI 6.5.7: XSS vulnerable - using dangerouslySetInnerHTML */}
             <Typography variant="body2" color="text.secondary">
               <strong>Cardholder:</strong>{' '}
@@ -80,7 +79,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ payment }) => {
             </Typography>
 
             <Typography variant="h5" sx={{ mt: 1, mb: 1 }}>
-              ${payment.amount.toFixed(2)}
+              ${Number(payment.amount).toFixed(2)}
             </Typography>
 
             <Chip
@@ -92,8 +91,8 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ payment }) => {
             <Typography variant="caption" display="block" sx={{ mt: 2 }}>
               {new Date(payment.created_at).toLocaleString()}
             </Typography>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
 
         {/* ❌ PCI Violations Warning */}
         <Box sx={{ mt: 2, p: 1, bgcolor: '#ffebee', borderRadius: 1 }}>

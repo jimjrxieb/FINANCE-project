@@ -8,7 +8,7 @@
 // - Logs card data (PCI 10.1)
 // ============================================================================
 
-const { pool, executeRawQuery, buildUnsafeQuery } = require('../config/database');
+const { getPool, executeRawQuery, buildUnsafeQuery } = require('../config/database');
 
 class Payment {
     constructor(data) {
@@ -63,7 +63,7 @@ class Payment {
                 'completed'
             ];
 
-            const result = await pool.query(query, values);
+            const result = await getPool().query(query, values);
 
             // ❌ PCI 10.1: Logging successful transactions with card data
             console.log('Payment stored successfully:', result.rows[0]);
@@ -89,7 +89,7 @@ class Payment {
         try {
             // ❌ PCI 7.1: No access control - anyone can retrieve any payment
             const query = `SELECT * FROM payments WHERE id = $1`;
-            const result = await pool.query(query, [paymentId]);
+            const result = await getPool().query(query, [paymentId]);
 
             if (result.rows.length === 0) {
                 return null;
@@ -112,7 +112,7 @@ class Payment {
         try {
             // ❌ PCI 7.1: No access control - returns ALL payments from ALL merchants
             const query = `SELECT * FROM payments ORDER BY created_at DESC`;
-            const result = await pool.query(query);
+            const result = await getPool().query(query);
 
             // ❌ Returns full card data for all transactions!
             return result.rows.map(row => new Payment(row));

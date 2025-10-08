@@ -8,7 +8,7 @@
 // - No account lockout (PCI 8.2.5)
 // ============================================================================
 
-const { pool } = require('../config/database');
+const { getPool } = require('../config/database');
 const bcrypt = require('bcrypt');
 
 class Merchant {
@@ -56,7 +56,7 @@ class Merchant {
 
             const apiKey = this.generateApiKey();
 
-            const result = await pool.query(query, [
+            const result = await getPool().query(query, [
                 merchantData.username,
                 hashedPassword,  // Weakly hashed
                 merchantData.email,
@@ -126,7 +126,7 @@ class Merchant {
         try {
             // This one is safe (parameterized), but we'll create unsafe versions elsewhere
             const query = 'SELECT * FROM merchants WHERE username = $1';
-            const result = await pool.query(query, [username]);
+            const result = await getPool().query(query, [username]);
 
             if (result.rows.length === 0) {
                 return null;
@@ -148,7 +148,7 @@ class Merchant {
         try {
             // ❌ PCI 7.1: No access control - any merchant can view any other merchant
             const query = 'SELECT * FROM merchants WHERE id = $1';
-            const result = await pool.query(query, [merchantId]);
+            const result = await getPool().query(query, [merchantId]);
 
             if (result.rows.length === 0) {
                 return null;
@@ -170,7 +170,7 @@ class Merchant {
         try {
             // ❌ PCI 7.1: Anyone can list all merchants
             const query = 'SELECT * FROM merchants ORDER BY created_at DESC';
-            const result = await pool.query(query);
+            const result = await getPool().query(query);
 
             return result.rows.map(row => new Merchant(row));
 
@@ -197,7 +197,7 @@ class Merchant {
             const hashedPassword = await bcrypt.hash(newPassword, WEAK_SALT_ROUNDS);
 
             const query = 'UPDATE merchants SET password = $1 WHERE id = $2 RETURNING *';
-            const result = await pool.query(query, [hashedPassword, merchantId]);
+            const result = await getPool().query(query, [hashedPassword, merchantId]);
 
             // ❌ PCI 10.2: Not logging password changes
             console.log('Password updated for merchant:', merchantId);
@@ -234,7 +234,7 @@ class Merchant {
         try {
             // ❌ PCI 8.2.5: No rate limiting on API key validation
             const query = 'SELECT * FROM merchants WHERE api_key = $1';
-            const result = await pool.query(query, [apiKey]);
+            const result = await getPool().query(query, [apiKey]);
 
             if (result.rows.length === 0) {
                 return null;
