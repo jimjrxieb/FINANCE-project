@@ -2,10 +2,28 @@
 # TERRAFORM VARIABLES - INTENTIONALLY INSECURE
 # ============================================================================
 
+# Deployment Target - LocalStack vs AWS
+variable "deployment_target" {
+  description = "Where to deploy: localstack or aws"
+  type        = string
+  default     = "localstack"
+
+  validation {
+    condition     = contains(["localstack", "aws"], var.deployment_target)
+    error_message = "Must be 'localstack' or 'aws'"
+  }
+}
+
 variable "aws_region" {
   description = "AWS region for all resources"
   type        = string
   default     = "us-east-1"
+}
+
+variable "localstack_endpoint" {
+  description = "LocalStack endpoint URL"
+  type        = string
+  default     = "http://localhost:4566"
 }
 
 variable "environment" {

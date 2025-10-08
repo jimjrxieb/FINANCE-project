@@ -28,7 +28,8 @@ resource "aws_secretsmanager_secret_version" "db_password" {
   secret_string = jsonencode({
     username = var.db_username
     password = var.db_password
-    host     = aws_db_instance.payment_db.endpoint
+    # Use different endpoints for LocalStack vs AWS
+    host     = var.deployment_target == "localstack" ? "postgres:5432" : (var.deployment_target == "aws" && length(aws_db_instance.payment_db) > 0 ? aws_db_instance.payment_db[0].endpoint : "localhost:5432")
     port     = 5432
     dbname   = var.project_name
   })

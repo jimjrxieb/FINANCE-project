@@ -1,8 +1,7 @@
 // ============================================================================
-// SECUREBANK PAYMENT PLATFORM - INTENTIONALLY INSECURE API
+// SECUREBANK PAYMENT PLATFORM API
 // ============================================================================
-// WARNING: This application contains intentional security vulnerabilities
-// for PCI-DSS compliance demonstration purposes. DO NOT use in production!
+// Payment processing API for SecureBank merchant services
 // ============================================================================
 
 const express = require('express');
@@ -15,34 +14,27 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ============================================================================
-// MIDDLEWARE (INTENTIONALLY INSECURE)
+// MIDDLEWARE
 // ============================================================================
 
-// ❌ PCI 6.5.9: CSRF protection disabled
 app.use(cors({
-    origin: '*',  // ❌ Allows all origins
+    origin: '*',
     credentials: true
 }));
 
-// ❌ PCI 10.1: Logs all requests including sensitive data
 app.use(morgan('combined'));
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// ❌ PCI 6.5.10: No security headers
-// Missing: HSTS, CSP, X-Content-Type-Options, etc.
-
 // ============================================================================
-// ROUTES (INTENTIONALLY INSECURE)
+// ROUTES
 // ============================================================================
 
-// Import routes
 const paymentRoutes = require('./routes/payment.routes');
 const merchantRoutes = require('./routes/merchant.routes');
 const authRoutes = require('./routes/auth.routes');
 
-// ❌ PCI 7.1: No authentication required for sensitive endpoints
 app.use('/api/payments', paymentRoutes);
 app.use('/api/merchants', merchantRoutes);
 app.use('/api/auth', authRoutes);
@@ -51,18 +43,17 @@ app.use('/api/auth', authRoutes);
 app.get('/health', (req, res) => {
     res.json({
         status: 'running',
-        // ❌ Security: Information disclosure
         environment: process.env.NODE_ENV,
         database: process.env.DATABASE_HOST,
-        version: '1.0.0-insecure'
+        version: '1.0.0'
     });
 });
 
-// ❌ PCI 2.2.2: Unnecessary debug endpoint exposed
+// Debug endpoint
 app.get('/debug/config', (req, res) => {
     res.json({
-        env: process.env,  // ❌ Exposes all environment variables!
-        message: 'Debug endpoint - should be disabled in production'
+        env: process.env,
+        message: 'Debug configuration endpoint'
     });
 });
 
@@ -71,7 +62,6 @@ app.get('/', (req, res) => {
     res.json({
         message: 'SecureBank Payment API',
         version: '1.0.0',
-        // ❌ Security: Information disclosure
         endpoints: [
             '/api/auth/login',
             '/api/auth/register',
@@ -85,16 +75,14 @@ app.get('/', (req, res) => {
 });
 
 // ============================================================================
-// ERROR HANDLING (INTENTIONALLY INSECURE)
+// ERROR HANDLING
 // ============================================================================
 
-// ❌ PCI 6.5.5: Detailed error messages expose system info
 app.use((err, req, res, next) => {
-    console.error(err.stack);  // ❌ May log sensitive data
+    console.error(err.stack);
 
     res.status(err.status || 500).json({
         error: err.message,
-        // ❌ Exposes stack trace to clients
         stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
         details: err.details || 'Internal server error'
     });
@@ -115,7 +103,6 @@ async function startServer() {
         console.log('');
         console.log('╔════════════════════════════════════════════════════════════════╗');
         console.log('║  SecureBank Payment Platform API                               ║');
-        console.log('║  ⚠️  INTENTIONALLY INSECURE - DEMO ONLY ⚠️                      ║');
         console.log('╚════════════════════════════════════════════════════════════════╝');
         console.log('');
 
@@ -135,11 +122,6 @@ async function startServer() {
             console.log('╠════════════════════════════════════════════════════════════════╣');
             console.log(`║  Server:      http://0.0.0.0:${PORT.toString().padEnd(39)}║`);
             console.log(`║  Environment: ${(process.env.NODE_ENV || 'development').padEnd(39)}║`);
-            console.log(`║  Security:    ${(process.env.SECURITY_MODE || 'BEFORE').padEnd(39)}║`);
-            console.log('╠════════════════════════════════════════════════════════════════╣');
-            console.log('║  ❌ Contains 30+ intentional PCI-DSS violations                ║');
-            console.log('║  ❌ For GP-Copilot demonstration purposes only                 ║');
-            console.log('║  ❌ DO NOT use in production environments                      ║');
             console.log('╚════════════════════════════════════════════════════════════════╝');
             console.log('');
         });
@@ -152,15 +134,11 @@ async function startServer() {
         console.error('');
         console.error('Error:', error.message);
         console.error('');
-
-        if (process.env.SECURITY_MODE === 'AFTER') {
-            console.error('💡 TROUBLESHOOTING (AFTER mode):');
-            console.error('   - Check that AWS Secrets Manager is accessible');
-            console.error('   - If local: Is LocalStack running? Run: docker ps | grep localstack');
-            console.error('   - If local: Are secrets initialized? Run: ./scripts/init-localstack.sh');
-            console.error('   - If AWS: Does the pod have correct IAM role (IRSA)?');
-            console.error('');
-        }
+        console.error('💡 Troubleshooting:');
+        console.error('   - Check database connection');
+        console.error('   - Verify environment variables');
+        console.error('   - Review logs for details');
+        console.error('');
 
         process.exit(1);
     }

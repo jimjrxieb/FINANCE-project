@@ -7,6 +7,9 @@
 # ============================================================================
 
 resource "aws_ecr_repository" "backend" {
+  # LocalStack has limited ECR support - only deploy on real AWS
+  count = var.deployment_target == "aws" ? 1 : 0
+
   name                 = "${var.project_name}/backend"
   image_tag_mutability = "MUTABLE"  # ❌ Should be IMMUTABLE
 
@@ -26,6 +29,8 @@ resource "aws_ecr_repository" "backend" {
 }
 
 resource "aws_ecr_repository" "frontend" {
+  count = var.deployment_target == "aws" ? 1 : 0
+
   name                 = "${var.project_name}/frontend"
   image_tag_mutability = "MUTABLE"
 
@@ -44,7 +49,8 @@ resource "aws_ecr_repository" "frontend" {
 
 # ❌ PCI 7.1: Public ECR repository
 resource "aws_ecr_repository_policy" "backend_public" {
-  repository = aws_ecr_repository.backend.name
+  count      = var.deployment_target == "aws" ? 1 : 0
+  repository = aws_ecr_repository.backend[0].name
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -59,3 +65,6 @@ resource "aws_ecr_repository_policy" "backend_public" {
     }]
   })
 }
+
+# For LocalStack deployments, use local Docker images
+# Build and run containers with docker-compose instead

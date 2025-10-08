@@ -22,7 +22,8 @@
       "Bash(cat:*)",
       "Bash(./scripts/start-local.sh:*)",
       "Bash(curl:*)",
-      "Bash(sudo rm:*)"
+      "Bash(sudo rm:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

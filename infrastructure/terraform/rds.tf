@@ -9,6 +9,8 @@
 # ============================================================================
 
 resource "aws_db_subnet_group" "main" {
+  # LocalStack has limited RDS support - make subnet group optional
+  count      = var.deployment_target == "aws" ? 1 : 0
   name       = "${var.project_name}-db-subnet-group"
   subnet_ids = [aws_subnet.public_1.id, aws_subnet.public_2.id]
 
@@ -19,6 +21,9 @@ resource "aws_db_subnet_group" "main" {
 
 # ❌ CRITICAL: Public RDS storing CVV/PIN
 resource "aws_db_instance" "payment_db" {
+  # LocalStack has limited RDS support
+  count = var.deployment_target == "aws" ? 1 : 0
+
   identifier     = "${var.project_name}-payment-db"
   engine         = "postgres"
   engine_version = "14.10"
@@ -40,7 +45,7 @@ resource "aws_db_instance" "payment_db" {
   publicly_accessible = true  # ❌ CRITICAL!
 
   vpc_security_group_ids = [aws_security_group.allow_all.id]
-  db_subnet_group_name   = aws_db_subnet_group.main.name
+  db_subnet_group_name   = aws_db_subnet_group.main[0].name
 
   # ❌ PCI 10.7: Backup retention too short
   backup_retention_period = 1  # ❌ Should be 90+ days
@@ -62,3 +67,7 @@ resource "aws_db_instance" "payment_db" {
     Encryption  = "NONE"  # ❌ Red flag!
   }
 }
+
+# LocalStack alternative - use container-based PostgreSQL
+# For LocalStack deployments, use docker-compose PostgreSQL instead
+# See docker-compose.yml for local database configuration

@@ -7,7 +7,8 @@
 
 # EKS Cluster Role
 resource "aws_iam_role" "eks_cluster" {
-  name = "${var.project_name}-eks-cluster-role"
+  count = var.deployment_target == "aws" ? 1 : 0
+  name  = "${var.project_name}-eks-cluster-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -26,13 +27,15 @@ resource "aws_iam_role" "eks_cluster" {
 }
 
 resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
+  count      = var.deployment_target == "aws" ? 1 : 0
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-  role       = aws_iam_role.eks_cluster.name
+  role       = aws_iam_role.eks_cluster[0].name
 }
 
 # EKS Node Role
 resource "aws_iam_role" "eks_node" {
-  name = "${var.project_name}-eks-node-role"
+  count = var.deployment_target == "aws" ? 1 : 0
+  name  = "${var.project_name}-eks-node-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -51,18 +54,21 @@ resource "aws_iam_role" "eks_node" {
 }
 
 resource "aws_iam_role_policy_attachment" "eks_node_policy" {
+  count      = var.deployment_target == "aws" ? 1 : 0
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-  role       = aws_iam_role.eks_node.name
+  role       = aws_iam_role.eks_node[0].name
 }
 
 resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
+  count      = var.deployment_target == "aws" ? 1 : 0
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-  role       = aws_iam_role.eks_node.name
+  role       = aws_iam_role.eks_node[0].name
 }
 
 resource "aws_iam_role_policy_attachment" "eks_registry_policy" {
+  count      = var.deployment_target == "aws" ? 1 : 0
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  role       = aws_iam_role.eks_node.name
+  role       = aws_iam_role.eks_node[0].name
 }
 
 # ❌ PCI 7.1: Overly permissive policy for application

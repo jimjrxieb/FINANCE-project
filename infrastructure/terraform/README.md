@@ -1,6 +1,27 @@
 # SecureBank Terraform Infrastructure
 
-**Production-Realistic AWS Infrastructure with Intentional PCI-DSS Violations**
+**LocalStack + AWS Deployment - Production-Realistic Infrastructure with Intentional PCI-DSS Violations**
+
+## 🎯 Deployment Options
+
+This Terraform configuration supports **two deployment targets**:
+
+1. **LocalStack** - FREE local AWS emulation for development/testing ($0)
+2. **AWS** - Real AWS cloud for demos/validation (~$183/month or $6/day)
+
+### Quick Start
+
+```bash
+# FREE - Deploy to LocalStack (default)
+terraform apply
+
+# PAID - Deploy to real AWS
+terraform apply -var="deployment_target=aws"
+```
+
+See [Deployment Guide](#-deployment-targets) below for details.
+
+---
 
 ## 📁 File Structure
 
@@ -23,6 +44,95 @@ terraform/
 ├── terraform.tfvars.example # Example variables file
 └── .gitignore               # Git ignore rules
 ```
+
+## 🚀 Deployment Targets
+
+### Option 1: LocalStack (FREE - Recommended for Testing)
+
+**What is LocalStack?**
+- Free local AWS emulation running on your laptop
+- Emulates S3, Secrets Manager, CloudWatch, and more
+- Perfect for development and testing
+- **Cost: $0**
+
+**What works:**
+- ✅ S3 buckets
+- ✅ Secrets Manager
+- ✅ CloudWatch Logs
+- ✅ VPC/Networking (basic)
+
+**What doesn't work (use docker-compose instead):**
+- ❌ RDS → Use PostgreSQL container
+- ❌ EKS → Use docker-compose
+- ❌ ECR → Use local Docker images
+
+**Deploy to LocalStack:**
+
+```bash
+# 1. Start LocalStack
+docker run -d \
+  --name localstack \
+  -p 4566:4566 \
+  -e SERVICES=s3,secretsmanager,cloudwatch,iam,ec2 \
+  localstack/localstack:latest
+
+# 2. Deploy infrastructure
+cd infrastructure/terraform
+terraform init
+terraform apply  # Default is localstack
+
+# 3. Start application (uses docker-compose for database)
+cd ../..
+docker-compose up
+```
+
+### Option 2: Real AWS (COSTS MONEY - Demo/Validation Only)
+
+⚠️ **WARNING: This costs real money!**
+
+**Cost breakdown:**
+- 1 hour: ~$0.25
+- 8 hours (demo): ~$2
+- 1 day: ~$6
+- 1 month: ~$183
+
+**What you get:**
+- ✅ Real RDS PostgreSQL (public, unencrypted)
+- ✅ Real EKS cluster (public endpoint)
+- ✅ Real S3 buckets (public)
+- ✅ Full AWS infrastructure violations
+
+**Deploy to AWS:**
+
+```bash
+# 1. Configure AWS credentials
+export AWS_ACCESS_KEY_ID="your-key"
+export AWS_SECRET_ACCESS_KEY="your-secret"
+export AWS_DEFAULT_REGION="us-east-1"
+
+# 2. Deploy to AWS
+cd infrastructure/terraform
+terraform init
+terraform apply -var="deployment_target=aws"
+
+# 3. IMPORTANT: Destroy when done to stop costs!
+terraform destroy -var="deployment_target=aws"
+```
+
+### Comparison
+
+| Feature | LocalStack | AWS |
+|---------|-----------|-----|
+| **Cost** | FREE | ~$183/month |
+| **Setup time** | 30 seconds | 15 minutes |
+| **RDS** | ❌ (use docker) | ✅ Real RDS |
+| **EKS** | ❌ (use docker) | ✅ Real EKS |
+| **S3** | ✅ Emulated | ✅ Real S3 |
+| **App violations** | ✅ All present | ✅ All present |
+| **Infra violations** | ⚠️ Limited | ✅ All present |
+| **Use case** | Development, testing | Client demos, validation |
+
+---
 
 ## 🚀 Quick Start
 
