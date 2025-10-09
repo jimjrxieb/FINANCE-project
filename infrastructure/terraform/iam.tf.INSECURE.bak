@@ -91,119 +91,17 @@ resource "aws_iam_role" "app_role" {
   }
 }
 
-# ✅ PCI 7.1: Least-privilege IAM policies (no wildcards)
-
-# S3 Access Policy (specific buckets only)
-resource "aws_iam_role_policy" "app_s3" {
-  name = "s3-access"
+# ❌ PCI 7.1.2: Administrator access to application role
+resource "aws_iam_role_policy" "app_admin" {
+  name = "admin-access"
   role = aws_iam_role.app_role.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "S3BucketAccess"
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject"
-        ]
-        Resource = [
-          "arn:aws:s3:::${var.project_name}-payment-receipts-*/*",
-          "arn:aws:s3:::${var.project_name}-audit-logs-*/*"
-        ]
-      },
-      {
-        Sid    = "S3BucketList"
-        Effect = "Allow"
-        Action = [
-          "s3:ListBucket"
-        ]
-        Resource = [
-          "arn:aws:s3:::${var.project_name}-payment-receipts-*",
-          "arn:aws:s3:::${var.project_name}-audit-logs-*"
-        ]
-      }
-    ]
-  })
-}
-
-# Secrets Manager Access (specific secrets only)
-resource "aws_iam_role_policy" "app_secrets" {
-  name = "secrets-access"
-  role = aws_iam_role.app_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "GetSecrets"
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
-        ]
-        Resource = [
-          "arn:aws:secretsmanager:*:*:secret:${var.project_name}/*"
-        ]
-      }
-    ]
-  })
-}
-
-# CloudWatch Logs (specific log groups)
-resource "aws_iam_role_policy" "app_logs" {
-  name = "logs-access"
-  role = aws_iam_role.app_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "CloudWatchLogs"
-        Effect = "Allow"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = [
-          "arn:aws:logs:*:*:log-group:/aws/${var.project_name}/*"
-        ]
-      }
-    ]
-  })
-}
-
-# KMS Encryption/Decryption (specific keys)
-resource "aws_iam_role_policy" "app_kms" {
-  name = "kms-access"
-  role = aws_iam_role.app_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "KMSAccess"
-        Effect = "Allow"
-        Action = [
-          "kms:Decrypt",
-          "kms:Encrypt",
-          "kms:GenerateDataKey"
-        ]
-        Resource = [
-          "arn:aws:kms:*:*:key/*"
-        ]
-        Condition = {
-          StringEquals = {
-            "kms:ViaService" = [
-              "s3.*.amazonaws.com",
-              "secretsmanager.*.amazonaws.com"
-            ]
-          }
-        }
-      }
-    ]
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "*"  # ❌ CRITICAL: Full admin access!
+      Resource = "*"
+    }]
   })
 }
