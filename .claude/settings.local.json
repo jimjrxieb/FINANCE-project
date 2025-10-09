@@ -39,7 +39,8 @@
       "Bash(./secops/3-fixers/auto-fixers/fix-security-groups.sh:*)",
       "Bash(bash:*)",
       "Bash(terraform:*)",
-      "Bash(./secops/3-fixers/auto-fixers/fix-s3-encryption.sh:*)"
+      "Bash(./secops/3-fixers/auto-fixers/fix-s3-encryption.sh:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []

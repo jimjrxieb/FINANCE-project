@@ -190,7 +190,7 @@ metadata:
   namespace: gatekeeper-system
 spec:
   # ❌ PCI 6.6: Audit mode only, should be "deny"
-  enforcementAction: deny  # ✅ ENFORCED
+  enforcementAction: dryrun  # ❌ Should be "deny"!
   match:
     kinds:
       - apiGroups: ["apps"]
@@ -230,7 +230,7 @@ metadata:
   name: block-privileged-containers
   namespace: gatekeeper-system
 spec:
-  enforcementAction: deny  # ✅ ENFORCED
+  enforcementAction: dryrun  # ❌ Should be "deny"!
   match:
     kinds:
       - apiGroups: ["apps"]
@@ -279,7 +279,7 @@ metadata:
   name: block-cvv-pin-in-configmaps
   namespace: gatekeeper-system
 spec:
-  enforcementAction: deny  # ✅ ENFORCED
+  enforcementAction: dryrun  # ❌ Should be "deny"!
   match:
     kinds:
       - apiGroups: [""]
@@ -291,22 +291,22 @@ spec:
 # Mutation: Add Security Context (DISABLED)
 # ❌ PCI 6.6: Mutation webhooks disabled
 # This SHOULD automatically add securityContext to pods
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: add-security-context
-spec:
-  applyTo:
-    - groups: ["apps"]
-      kinds: ["Deployment"]
-      versions: ["v1"]
-  location: "spec.template.spec.securityContext"
-  parameters:
-    assign:
-      value:
-        runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+# apiVersion: mutations.gatekeeper.sh/v1alpha1
+# kind: Assign
+# metadata:
+#   name: add-security-context
+# spec:
+#   applyTo:
+#     - groups: ["apps"]
+#       kinds: ["Deployment"]
+#       versions: ["v1"]
+#   location: "spec.template.spec.securityContext"
+#   parameters:
+#     assign:
+#       value:
+#         runAsNonRoot: true
+#         runAsUser: 1000
+#         fsGroup: 1000
 
 ---
 # ============================================================================
@@ -324,14 +324,14 @@ data:
     =====================
 
     Installation: ✅ Installed
-    Enforcement:  ✅ ENABLED (deny mode)
-    Mutations:    ✅ ENABLED
+    Enforcement:  ❌ DISABLED (audit mode only)
+    Mutations:    ❌ DISABLED
 
     Policies Defined:
-    - ✅ Block root containers (✅ ENFORCED)
-    - ✅ Block privileged containers (✅ ENFORCED)
-    - ✅ Block CVV/PIN in ConfigMaps (✅ ENFORCED)
-    - ✅ Require resource limits (✅ ENFORCED)
+    - ✅ Block root containers (NOT enforced)
+    - ✅ Block privileged containers (NOT enforced)
+    - ✅ Block CVV/PIN in ConfigMaps (NOT enforced)
+    - ✅ Require resource limits (NOT enforced)
 
     Current Violations Allowed:
     - ❌ securebank-backend runs as root
@@ -368,18 +368,18 @@ data:
 #       - apiGroups: ["apps"]
 #         kinds: ["Deployment"]
 #
-apiVersion: mutations.gatekeeper.sh/v1alpha1
-kind: Assign
-metadata:
-  name: add-security-context
-spec:
-  applyTo:
-    - groups: ["apps"]
-      kinds: ["Deployment"]
-  location: "spec.template.spec.securityContext"
-  parameters:
-    assign:
-      value:
-        runAsNonRoot: true  # ✅ Automatically adds security context
-        runAsUser: 1000
-        fsGroup: 1000
+# apiVersion: mutations.gatekeeper.sh/v1alpha1
+# kind: Assign
+# metadata:
+#   name: add-security-context
+# spec:
+#   applyTo:
+#     - groups: ["apps"]
+#       kinds: ["Deployment"]
+#   location: "spec.template.spec.securityContext"
+#   parameters:
+#     assign:
+#       value:
+#         runAsNonRoot: true  # ✅ Automatically adds security context
+#         runAsUser: 1000
+#         fsGroup: 1000
