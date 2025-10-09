@@ -40,7 +40,8 @@
       "Bash(bash:*)",
       "Bash(terraform:*)",
       "Bash(./secops/3-fixers/auto-fixers/fix-s3-encryption.sh:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(kubectl:*)"
     ],
     "deny": [],
     "ask": []
