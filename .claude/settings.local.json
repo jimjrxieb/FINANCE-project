@@ -26,7 +26,20 @@
       "Bash(git checkout:*)",
       "Bash(npm run build:*)",
       "Bash(python3:*)",
-      "Bash(aws:*)"
+      "Bash(aws:*)",
+      "Bash(git push:*)",
+      "Bash(./view-findings.sh:*)",
+      "Bash(./run-secops.sh:*)",
+      "Bash(/home/jimmie/linkops-industries/GP-copilot/GP-PROJECTS/FINANCE-project/view-secops.sh:*)",
+      "Bash(timeout:*)",
+      "Read(//home/jimmie/linkops-industries/GP-copilot/**)",
+      "Bash(ln:*)",
+      "Bash(readlink:*)",
+      "Bash(./run-all-scans.sh)",
+      "Bash(./secops/3-fixers/auto-fixers/fix-security-groups.sh:*)",
+      "Bash(bash:*)",
+      "Bash(terraform:*)",
+      "Bash(./secops/3-fixers/auto-fixers/fix-s3-encryption.sh:*)"
     ],
     "deny": [],
     "ask": []

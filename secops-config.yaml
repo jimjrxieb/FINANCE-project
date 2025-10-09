@@ -1,0 +1,51 @@
+# SecOps Configuration - FINANCE Project
+project:
+  name: "SecureBank"
+  industry: "financial-services"
+  compliance_frameworks:
+    - "PCI-DSS-3.2.1"
+    - "SOC2-Type-II"
+    - "GLBA"
+
+scanning:
+  enabled_scanners:
+    - tfsec
+    - checkov
+    - bandit
+    - trivy
+    - gitleaks
+    - semgrep
+    - opa
+
+  scan_paths:
+    terraform: "./infrastructure/terraform"
+    kubernetes: "./infrastructure/k8s"
+    backend: "./backend"
+    frontend: "./frontend"
+
+  severity_thresholds:
+    fail_on_critical: true
+    fail_on_high: true
+    fail_on_medium: false
+
+policies:
+  opa_policies:
+    - "cloud-security-patterns/vpc-isolation"
+    - "cloud-security-patterns/zero-trust-sg"
+    - "cloud-security-patterns/private-cloud-access"
+    - "compliance-frameworks/pci-dss"
+
+  enforcement_mode: "strict"  # strict, permissive, audit-only
+
+reporting:
+  formats:
+    - markdown
+    - json
+    - pdf
+
+  email_recipients:
+    - "security-team@securebank.example.com"
+
+aws:
+  region: "us-east-1"
+  use_localstack: true  # For demo

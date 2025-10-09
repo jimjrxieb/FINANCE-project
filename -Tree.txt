@@ -1,0 +1,151 @@
+.
+├── -Tree.txt
+├── AWS-DEPLOYMENT-GUIDE.md
+├── CLOUD-PLATFORM-SUMMARY.md
+├── Dockerfile
+├── FinancePRD.md
+├── Jenkinsfile
+├── LOCAL-TESTING.md
+├── PHASE1-DEMO-STATUS.md
+├── PRDjson.json
+├── QUICKSTART.md
+├── README-SECUREBANK.md
+├── README.md
+├── backend
+│   ├── Dockerfile
+│   ├── PRD.md
+│   ├── README.md
+│   ├── config
+│   │   ├── database.js
+│   │   └── secrets.js
+│   ├── controllers
+│   │   ├── auth.controller.js
+│   │   ├── merchant.controller.js
+│   │   └── payment.controller.js
+│   ├── middleware
+│   │   └── opa.middleware.js
+│   ├── models
+│   │   ├── Merchant.js
+│   │   └── Payment.js
+│   ├── package.json
+│   ├── routes
+│   │   ├── auth.routes.js
+│   │   ├── merchant.routes.js
+│   │   └── payment.routes.js
+│   ├── server.js
+│   ├── services
+│   │   └── aws.service.js
+│   └── utils
+├── deployment-service.yml
+├── docker-compose.yml
+├── docs
+│   ├── CODEBASE-AUDIT-REPORT.md
+│   ├── COMPLETE-PLATFORM-GUIDE.md
+│   ├── CURRENT-WORKING-STATE.md
+│   ├── OPA-SETUP.md
+│   ├── PHASE2-COMPLETE.md
+│   ├── REFACTOR-COMPLETE.md
+│   ├── TROUBLESHOOTING-SESSION.md
+│   └── VIOLATION-GUIDE.md
+├── frontend
+│   ├── Dockerfile
+│   ├── PRD.md
+│   ├── README.md
+│   ├── build
+│   │   ├── asset-manifest.json
+│   │   ├── favicon.ico
+│   │   ├── index.html
+│   │   ├── logo192.png
+│   │   ├── logo512.png
+│   │   ├── manifest.json
+│   │   ├── robots.txt
+│   │   ├── static
+│   │   │   ├── css
+│   │   │   │   ├── main.e6c13ad2.css
+│   │   │   │   └── main.e6c13ad2.css.map
+│   │   │   └── js
+│   │   │       ├── 453.d7446e4a.chunk.js
+│   │   │       ├── 453.d7446e4a.chunk.js.map
+│   │   │       ├── main.dcdbcdef.js
+│   │   │       ├── main.dcdbcdef.js.LICENSE.txt
+│   │   │       └── main.dcdbcdef.js.map
+│   │   └── test.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── public
+│   │   ├── favicon.ico
+│   │   ├── index.html
+│   │   ├── logo192.png
+│   │   ├── logo512.png
+│   │   ├── manifest.json
+│   │   ├── robots.txt
+│   │   └── test.html
+│   ├── src
+│   │   ├── App.css
+│   │   ├── App.test.tsx
+│   │   ├── App.tsx
+│   │   ├── components
+│   │   │   └── TransactionCard.tsx
+│   │   ├── index.css
+│   │   ├── index.tsx
+│   │   ├── logo.svg
+│   │   ├── pages
+│   │   │   ├── DashboardPage.tsx
+│   │   │   └── LoginPage.tsx
+│   │   ├── react-app-env.d.ts
+│   │   ├── reportWebVitals.ts
+│   │   ├── services
+│   │   │   └── api.ts
+│   │   ├── setupTests.ts
+│   │   ├── types
+│   │   │   └── index.ts
+│   │   └── utils
+│   └── tsconfig.json
+├── infrastructure
+│   ├── PRD.md
+│   ├── README.md
+│   ├── k8s
+│   │   ├── deployment.yaml
+│   │   ├── monitoring.yaml
+│   │   ├── namespace.yaml
+│   │   ├── opa-gatekeeper.yaml
+│   │   └── service.yaml
+│   ├── nginx
+│   │   ├── certs
+│   │   ├── generate-certs.sh
+│   │   └── nginx.conf
+│   ├── postgres
+│   │   └── init.sql
+│   ├── redis
+│   ├── terraform
+│   │   ├── README.md
+│   │   ├── backend.tf
+│   │   ├── cloudwatch.tf
+│   │   ├── ecr.tf
+│   │   ├── eks.tf
+│   │   ├── iam.tf
+│   │   ├── outputs.tf
+│   │   ├── provider.tf
+│   │   ├── rds.tf
+│   │   ├── s3.tf
+│   │   ├── secrets-manager.tf
+│   │   ├── security-groups.tf
+│   │   ├── terraform.tfvars.example
+│   │   ├── variables.tf
+│   │   ├── versions.tf
+│   │   └── vpc.tf
+│   └── vault
+├── mvnw
+├── mvnw.cmd
+├── policies
+│   └── opa
+│       └── securebank.rego
+├── pom.xml
+├── scripts
+│   ├── init-localstack.sh
+│   ├── start-local.sh
+│   └── verify-aws-deployment.sh
+├── setup.sh
+└── tmp
+
+34 directories, 115 files
