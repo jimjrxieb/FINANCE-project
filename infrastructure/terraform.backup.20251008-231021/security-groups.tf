@@ -11,7 +11,6 @@ resource "aws_security_group" "alb" {
   description = "Allow HTTPS from internet to ALB only"
   vpc_id      = aws_vpc.main.id
 
-  # tfsec:ignore:aws-ec2-no-public-ingress-sgr ALB must accept HTTPS from internet
   # Allow HTTPS from internet (ALB only)
   ingress {
     description = "HTTPS from internet"
@@ -21,7 +20,6 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]  # OK: ALB is public-facing
   }
 
-  # tfsec:ignore:aws-ec2-no-public-ingress-sgr ALB must accept HTTP for HTTPS redirect
   # Allow HTTP redirect to HTTPS
   ingress {
     description = "HTTP redirect to HTTPS"
@@ -80,7 +78,6 @@ resource "aws_security_group" "backend" {
     security_groups = [aws_security_group.redis.id]
   }
 
-  # tfsec:ignore:aws-ec2-no-public-egress-sgr Required for AWS API calls (S3, Secrets Manager, CloudWatch)
   # Egress for AWS API calls (VPC endpoints preferred)
   egress {
     description = "AWS API calls"
@@ -202,7 +199,6 @@ resource "aws_security_group" "eks_nodes" {
     security_groups = [aws_security_group.eks_cluster.id]
   }
 
-  # tfsec:ignore:aws-ec2-no-public-egress-sgr Required for pulling container images from ECR/DockerHub
   # Egress for pulling images, updates
   egress {
     description = "Internet for images/updates"

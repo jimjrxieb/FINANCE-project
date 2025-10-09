@@ -34,30 +34,30 @@ resource "aws_db_instance" "payment_db" {
   storage_type          = "gp3"
 
   # ❌ PCI 3.4: No storage encryption
-  storage_encrypted = true  # ✅ KMS encryption enabled
-  kms_key_id = aws_kms_key.securebank.arn  # ✅ Using project KMS key
+  storage_encrypted = false  # ❌ CRITICAL!
+  # kms_key_id = aws_kms_key.rds.arn
 
   db_name  = var.project_name
   username = var.db_username  # ❌ "admin"
   password = var.db_password  # ❌ "supersecret"
 
   # ❌ PCI 2.3: Publicly accessible database!
-  publicly_accessible = false  # ✅ Private database
+  publicly_accessible = true  # ❌ CRITICAL!
 
-  vpc_security_group_ids = [aws_security_group.database.id]  # ✅ Least-privilege SG
+  vpc_security_group_ids = [aws_security_group.allow_all.id]
   db_subnet_group_name   = aws_db_subnet_group.main[0].name
 
   # ❌ PCI 10.7: Backup retention too short
-  backup_retention_period = 90  # ✅ PCI-DSS 10.7 compliant
+  backup_retention_period = 1  # ❌ Should be 90+ days
 
   # ❌ PCI 2.4: No automated patching
-  auto_minor_version_upgrade = true  # ✅ PCI-DSS 2.4 - automated patching
+  auto_minor_version_upgrade = false
 
   # ❌ PCI 10.1: No enhanced monitoring
-  enabled_cloudwatch_logs_exports = ["postgresql"]  # ✅ PCI-DSS 10.1
+  enabled_cloudwatch_logs_exports = []  # ❌ Should log all queries
 
   # ❌ Deletion protection disabled
-  deletion_protection = true  # ✅ Prevent accidental deletion
+  deletion_protection = false
   skip_final_snapshot = true
 
   tags = {
