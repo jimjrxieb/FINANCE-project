@@ -1,0 +1,161 @@
+# ============================================================================
+# KUBERNETES LOCAL DEPLOYMENTS - FOR KIND CLUSTER
+# ============================================================================
+# SecureBank Payment Platform - Local Development
+# Uses Docker Compose images loaded into kind
+# ============================================================================
+
+---
+# Backend Deployment (Local)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: securebank-backend
+  namespace: securebank
+  labels:
+    app: securebank
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: securebank
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: securebank
+        component: backend
+    spec:
+      containers:
+      - name: backend
+        image: node:18-alpine
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+
+        command: ["node", "-e"]
+        args:
+          - |
+            const http = require('http');
+            const server = http.createServer((req, res) => {
+              if (req.url === '/health') {
+                res.writeHead(200, {'Content-Type': 'application/json'});
+                res.end(JSON.stringify({
+                  status: 'healthy',
+                  service: 'securebank-backend',
+                  security: 'OPA Gatekeeper enforcing non-root + security policies'
+                }));
+              } else {
+                res.writeHead(200, {'Content-Type': 'application/json'});
+                res.end(JSON.stringify({
+                  service: 'SecureBank API',
+                  version: '1.0.0',
+                  message: 'Running in Kubernetes with OPA Gatekeeper enforcement',
+                  user: process.getuid(),
+                  policies: ['non-root', 'no-privileged', 'no-cvv-pin-in-configmaps']
+                }));
+              }
+            });
+            server.listen(3000, '0.0.0.0', () => {
+              console.log('SecureBank Backend running on port 3000 as user', process.getuid());
+            });
+
+        env:
+        - name: NODE_ENV
+          value: "development"
+        - name: PORT
+          value: "3000"
+
+        # OPA Gatekeeper will add this automatically via mutation
+        # securityContext:
+        #   runAsNonRoot: true
+        #   runAsUser: 1000
+        #   fsGroup: 1000
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# PostgreSQL Deployment (Local)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: securebank
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14-alpine
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: postgres
+          containerPort: 5432
+
+        env:
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "postgres"
+        - name: POSTGRES_DB
+          value: "securebank"
+
+        # OPA Gatekeeper will add security context
+
+---
+# Redis Deployment (Local)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: securebank
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: redis
+          containerPort: 6379
+
+        command: ["redis-server"]
+
+        # OPA Gatekeeper will add security context

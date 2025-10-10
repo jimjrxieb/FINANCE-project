@@ -1,0 +1,164 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: securebank-backend
+  namespace: securebank
+  labels:
+    app: securebank
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: securebank
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: securebank
+        component: backend
+    spec:
+      containers:
+      - name: backend
+        image: node:18-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        command:
+        - node
+        - -e
+        args:
+        - "const http = require('http');\nconst server = http.createServer((req, res)\
+          \ => {\n  if (req.url === '/health') {\n    res.writeHead(200, {'Content-Type':\
+          \ 'application/json'});\n    res.end(JSON.stringify({\n      status: 'healthy',\n\
+          \      service: 'securebank-backend',\n      security: 'OPA Gatekeeper enforcing\
+          \ non-root + security policies'\n    }));\n  } else {\n    res.writeHead(200,\
+          \ {'Content-Type': 'application/json'});\n    res.end(JSON.stringify({\n\
+          \      service: 'SecureBank API',\n      version: '1.0.0',\n      message:\
+          \ 'Running in Kubernetes with OPA Gatekeeper enforcement',\n      user:\
+          \ process.getuid(),\n      policies: ['non-root', 'no-privileged', 'no-cvv-pin-in-configmaps']\n\
+          \    }));\n  }\n});\nserver.listen(3000, '0.0.0.0', () => {\n  console.log('SecureBank\
+          \ Backend running on port 3000 as user', process.getuid());\n});\n"
+        env:
+        - name: NODE_ENV
+          value: development
+        - name: PORT
+          value: '3000'
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: securebank
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: postgres
+          containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          value: postgres
+        - name: POSTGRES_DB
+          value: securebank
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: securebank
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: redis
+          containerPort: 6379
+        command:
+        - redis-server
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi

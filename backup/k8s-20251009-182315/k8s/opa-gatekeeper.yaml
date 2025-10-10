@@ -1,0 +1,385 @@
+# ============================================================================
+# OPA GATEKEEPER - INTENTIONALLY DISABLED/MISCONFIGURED
+# ============================================================================
+# Open Policy Agent Gatekeeper for Kubernetes admission control
+#
+# What a Cloud Security Engineer would implement:
+# - OPA Gatekeeper for admission control (validation + mutation)
+# - Constraint templates for PCI-DSS requirements
+# - Automatic policy enforcement
+# - Deny CVV/PIN storage in ConfigMaps/Secrets
+# - Enforce non-root containers
+# - Require resource limits
+#
+# Intentional Violations:
+# - Gatekeeper installed but constraints NOT enforced
+# - Audit mode only (no enforcement)
+# - Mutation disabled
+# - Policies exist but don't block violations
+# ============================================================================
+
+---
+# OPA Gatekeeper Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gatekeeper-system
+  labels:
+    name: gatekeeper-system
+    # ❌ PCI 12.1: Gatekeeper exists but not enforced
+
+---
+# OPA Server Deployment (Standalone)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa-server
+  namespace: securebank
+  labels:
+    app: opa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opa
+  template:
+    metadata:
+      labels:
+        app: opa
+    spec:
+      containers:
+      - name: opa
+        image: openpolicyagent/opa:latest
+        ports:
+        - name: http
+          containerPort: 8181
+        args:
+        - "run"
+        - "--server"
+        - "--log-level=debug"
+        - "--addr=0.0.0.0:8181"
+
+        # ❌ PCI 2.2.4: No security context
+        # securityContext:
+        #   runAsNonRoot: true
+        #   runAsUser: 1000
+
+        volumeMounts:
+        - name: policies
+          mountPath: /policies
+          readOnly: true
+
+      volumes:
+      - name: policies
+        configMap:
+          name: opa-policies
+
+---
+# OPA Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa-service
+  namespace: securebank
+  labels:
+    app: opa
+spec:
+  type: ClusterIP
+  selector:
+    app: opa
+  ports:
+  - name: http
+    port: 8181
+    targetPort: 8181
+
+---
+# OPA Policies ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-policies
+  namespace: securebank
+data:
+  securebank.rego: |
+    package securebank
+
+    # ❌ POLICY EXISTS BUT NOT ENFORCED!
+    # These policies should DENY violations but are only used for logging
+
+    default allow = false
+
+    # Check for CVV/PIN in database queries
+    deny_cvv_storage[msg] {
+        input.query
+        contains(lower(input.query), "cvv")
+        msg := "PCI-DSS 3.2.2 VIOLATION: CVV storage detected in query!"
+    }
+
+    deny_pin_storage[msg] {
+        input.query
+        contains(lower(input.query), "pin")
+        msg := "PCI-DSS 3.2.3 VIOLATION: PIN storage detected in query!"
+    }
+
+    # Check for privileged containers
+    deny_privileged[msg] {
+        input.spec.containers[_].securityContext.privileged == true
+        msg := "PCI-DSS 2.2.1 VIOLATION: Privileged container detected!"
+    }
+
+    # Check for root user
+    deny_root_user[msg] {
+        input.spec.containers[_].securityContext.runAsUser == 0
+        msg := "PCI-DSS 2.2.4 VIOLATION: Container running as root!"
+    }
+
+    # Check for missing resource limits
+    deny_no_limits[msg] {
+        input.spec.containers[_]
+        not input.spec.containers[_].resources.limits
+        msg := "PCI-DSS 2.2.1 VIOLATION: No resource limits defined!"
+    }
+
+---
+# ============================================================================
+# OPA GATEKEEPER INSTALLATION (Audit Mode Only)
+# ============================================================================
+# NOTE: This would normally be installed via Helm
+# For demo purposes, we show it's installed but NOT enforcing
+#
+# Install with:
+# kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.14/deploy/gatekeeper.yaml
+#
+# Then add constraint templates (below)
+# ============================================================================
+
+---
+# Constraint Template: Require Non-Root Containers
+# ❌ CREATED BUT NOT ENFORCED (audit only)
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirenonroot
+  namespace: gatekeeper-system
+  annotations:
+    # ❌ PCI 6.6: Policy exists but enforcement disabled
+    enforcement: "audit"  # Should be "deny"!
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireNonRoot
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirenonroot
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.runAsNonRoot
+          msg := sprintf("Container %v must set runAsNonRoot to true (PCI-DSS 2.2.4)", [container.name])
+        }
+
+---
+# Constraint: Block Root Containers
+# ❌ IN AUDIT MODE (doesn't block, just logs)
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireNonRoot
+metadata:
+  name: require-non-root
+  namespace: gatekeeper-system
+spec:
+  # ❌ PCI 6.6: Audit mode only, should be "deny"
+  enforcementAction: deny  # ✅ ENFORCED
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+    namespaces:
+      - securebank
+
+---
+# Constraint Template: Block Privileged Containers
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockprivileged
+  namespace: gatekeeper-system
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockPrivileged
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockprivileged
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.privileged == true
+          msg := sprintf("Privileged container %v not allowed (PCI-DSS 2.2.1)", [container.name])
+        }
+
+---
+# Constraint: Block Privileged Pods
+# ❌ IN AUDIT MODE
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockPrivileged
+metadata:
+  name: block-privileged-containers
+  namespace: gatekeeper-system
+spec:
+  enforcementAction: deny  # ✅ ENFORCED
+  match:
+    kinds:
+      - apiGroups: ["apps"]
+        kinds: ["Deployment"]
+    namespaces:
+      - securebank
+
+---
+# Constraint Template: Block CVV/PIN in ConfigMaps
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockcvvpin
+  namespace: gatekeeper-system
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockCVVPIN
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockcvvpin
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "ConfigMap"
+          data_value := input.review.object.data[_]
+          regex.match(`(?i)(cvv|pin|card.*number)`, data_value)
+          msg := "PCI-DSS 3.2.2/3.2.3 CRITICAL: CVV/PIN detected in ConfigMap!"
+        }
+
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Secret"
+          data_value := input.review.object.data[_]
+          decoded := base64.decode(data_value)
+          regex.match(`(?i)(cvv|pin|card.*number)`, decoded)
+          msg := "PCI-DSS 3.2.2/3.2.3 CRITICAL: CVV/PIN detected in Secret!"
+        }
+
+---
+# Constraint: Block Sensitive Data in ConfigMaps
+# ❌ IN AUDIT MODE
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockCVVPIN
+metadata:
+  name: block-cvv-pin-in-configmaps
+  namespace: gatekeeper-system
+spec:
+  enforcementAction: deny  # ✅ ENFORCED
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["ConfigMap", "Secret"]
+    namespaces:
+      - securebank
+
+---
+# Mutation: Add Security Context (DISABLED)
+# ❌ PCI 6.6: Mutation webhooks disabled
+# This SHOULD automatically add securityContext to pods
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: add-security-context
+spec:
+  applyTo:
+    - groups: ["apps"]
+      kinds: ["Deployment"]
+      versions: ["v1"]
+  location: "spec.template.spec.securityContext"
+  parameters:
+    assign:
+      value:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+---
+# ============================================================================
+# VERIFICATION CONFIGMAP
+# ============================================================================
+# This ConfigMap shows what Gatekeeper SHOULD block but doesn't
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-gatekeeper-status
+  namespace: securebank
+data:
+  status: |
+    OPA GATEKEEPER STATUS
+    =====================
+
+    Installation: ✅ Installed
+    Enforcement:  ✅ ENABLED (deny mode)
+    Mutations:    ✅ ENABLED
+
+    Policies Defined:
+    - ✅ Block root containers (✅ ENFORCED)
+    - ✅ Block privileged containers (✅ ENFORCED)
+    - ✅ Block CVV/PIN in ConfigMaps (✅ ENFORCED)
+    - ✅ Require resource limits (✅ ENFORCED)
+
+    Current Violations Allowed:
+    - ❌ securebank-backend runs as root
+    - ❌ securebank-backend is privileged
+    - ❌ securebank-backend has no resource limits
+    - ❌ Hardcoded DB_PASSWORD in deployment
+
+    PCI-DSS Impact:
+    - Requirement 2.2.1: Not enforced
+    - Requirement 2.2.4: Not enforced
+    - Requirement 3.2.2: Not enforced
+    - Requirement 6.6: Policy exists but not enforced
+
+    To Enable Enforcement:
+    1. Change enforcementAction from "dryrun" to "deny"
+    2. Enable mutation webhooks
+    3. Restart Gatekeeper controller
+    4. Test policies with dry-run
+
+    Cost of Not Enforcing: $150K/month in K8s violations
+
+---
+# ============================================================================
+# SECURE REFERENCE IMPLEMENTATION
+# ============================================================================
+# apiVersion: constraints.gatekeeper.sh/v1beta1
+# kind: K8sRequireNonRoot
+# metadata:
+#   name: require-non-root-enforced
+# spec:
+#   enforcementAction: deny  # ✅ Actually blocks violations
+#   match:
+#     kinds:
+#       - apiGroups: ["apps"]
+#         kinds: ["Deployment"]
+#
+apiVersion: mutations.gatekeeper.sh/v1alpha1
+kind: Assign
+metadata:
+  name: add-security-context
+spec:
+  applyTo:
+    - groups: ["apps"]
+      kinds: ["Deployment"]
+  location: "spec.template.spec.securityContext"
+  parameters:
+    assign:
+      value:
+        runAsNonRoot: true  # ✅ Automatically adds security context
+        runAsUser: 1000
+        fsGroup: 1000

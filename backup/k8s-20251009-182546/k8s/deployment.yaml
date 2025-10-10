@@ -1,0 +1,389 @@
+# ============================================================================
+# KUBERNETES DEPLOYMENTS - INTENTIONALLY INSECURE
+# ============================================================================
+# SecureBank Payment Platform - EKS Deployments
+#
+# What a Cloud Security Engineer would implement:
+# - Non-root containers
+# - Read-only root filesystem
+# - Resource limits
+# - Security contexts
+# - Network policies
+# - Pod security policies/standards
+# - Service mesh (Istio, Linkerd)
+#
+# Intentional Violations (25+):
+# - Runs as root
+# - Privileged containers
+# - No resource limits
+# - hostNetwork, hostPID
+# - Mounts host paths
+# - No security context
+# - Allows privilege escalation
+# - No network policies
+# ============================================================================
+
+---
+# Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: securebank-backend
+  namespace: securebank
+  labels:
+    app: securebank
+    component: backend
+    tier: api
+    # ❌ Advertising vulnerability
+    security: insecure
+    contains: cvv-pin-data
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: securebank
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: securebank
+        component: backend
+        tier: api
+      annotations:
+        # ❌ PCI 10.1: No pod annotations for audit
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # ❌ PCI 2.2.4: No service account with RBAC
+      # serviceAccountName: securebank-backend
+      automountServiceAccountToken: true  # ❌ Auto-mounts default SA token
+
+      # ❌ PCI 2.2.1: Shares host network namespace
+      hostNetwork: true  # ❌ CRITICAL: Access to host network!
+      hostPID: true      # ❌ CRITICAL: Can see all host processes!
+      hostIPC: true      # ❌ CRITICAL: Shares host IPC!
+
+      # ❌ PCI 7.1: No pod security context
+      # securityContext:
+      #   runAsNonRoot: true
+      #   runAsUser: 1000
+      #   fsGroup: 1000
+
+      containers:
+      - name: backend
+        image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/securebank/backend:IMAGE_TAG
+        imagePullPolicy: Always
+
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+
+        env:
+        # ❌ PCI 8.2.1: Hardcoded credentials in deployment
+        - name: DB_HOST
+          value: "securebank-payment-db.c9abc123xyz.us-east-1.rds.amazonaws.com"
+        - name: DB_USER
+          value: "admin"  # ❌ Hardcoded username!
+        - name: DB_PASSWORD
+          value: "supersecret"  # ❌ CRITICAL: Hardcoded password in manifest!
+        - name: DB_NAME
+          value: "securebank"
+        - name: DB_PORT
+          value: "5432"
+
+        # ❌ Redis credentials
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: REDIS_PASSWORD
+          value: ""  # ❌ No password!
+
+        # ❌ JWT secret hardcoded
+        - name: JWT_SECRET
+          value: "weak-secret-change-in-production"  # ❌ Weak secret!
+
+        # ❌ AWS credentials in environment
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: AWS_ACCESS_KEY_ID
+          value: "AKIAIOSFODNN7EXAMPLE"  # ❌ Hardcoded AWS key!
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"  # ❌ CRITICAL!
+
+        - name: S3_PAYMENT_BUCKET
+          value: "securebank-payment-receipts-production"
+        - name: S3_AUDIT_BUCKET
+          value: "securebank-audit-logs-production"
+
+        - name: NODE_ENV
+          value: "production"
+
+        # ❌ PCI 2.2.1: Debug mode enabled in production
+        - name: DEBUG
+          value: "true"  # ❌ Debug enabled!
+
+        # ❌ PCI 2.2.1: No resource limits
+        # resources:
+        #   requests:
+        #     memory: "256Mi"
+        #     cpu: "250m"
+        #   limits:
+        #     memory: "512Mi"
+        #     cpu: "500m"
+
+        # ❌ PCI 2.2.4: Container runs as root
+        securityContext:
+          privileged: true  # ❌ CRITICAL: Privileged container!
+          allowPrivilegeEscalation: true  # ❌ Can escalate privileges!
+          runAsUser: 0  # ❌ Running as root!
+          runAsNonRoot: false
+          readOnlyRootFilesystem: false  # ❌ Writable root filesystem!
+          capabilities:
+            add:
+              - ALL  # ❌ CRITICAL: All Linux capabilities!
+          # drop:
+          #   - ALL
+
+        # ❌ PCI 2.2.1: No health checks
+        # livenessProbe:
+        #   httpGet:
+        #     path: /health
+        #     port: 3000
+        #   initialDelaySeconds: 30
+        #   periodSeconds: 10
+
+        # readinessProbe:
+        #   httpGet:
+        #     path: /ready
+        #     port: 3000
+        #   initialDelaySeconds: 5
+        #   periodSeconds: 5
+
+        volumeMounts:
+        # ❌ PCI 3.4: Mounts host filesystem
+        - name: host-root
+          mountPath: /host  # ❌ CRITICAL: Full host filesystem access!
+        - name: docker-socket
+          mountPath: /var/run/docker.sock  # ❌ CRITICAL: Docker socket!
+
+      volumes:
+      # ❌ Mounting sensitive host paths
+      - name: host-root
+        hostPath:
+          path: /  # ❌ Entire host root!
+          type: Directory
+      - name: docker-socket
+        hostPath:
+          path: /var/run/docker.sock
+          type: Socket
+
+      # ❌ PCI 2.2.1: No node affinity or taints
+      # ❌ Pods can run on any node
+
+---
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: securebank-frontend
+  namespace: securebank
+  labels:
+    app: securebank
+    component: frontend
+    tier: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: securebank
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: securebank
+        component: frontend
+        tier: web
+    spec:
+      automountServiceAccountToken: true
+
+      # ❌ Frontend also shares host network
+      hostNetwork: true
+
+      containers:
+      - name: frontend
+        image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/securebank/frontend:IMAGE_TAG
+        imagePullPolicy: Always
+
+        ports:
+        - name: http
+          containerPort: 3001
+          protocol: TCP
+
+        env:
+        # ❌ Backend API endpoint
+        - name: REACT_APP_API_URL
+          value: "http://securebank-backend-service:3000"  # ❌ HTTP not HTTPS!
+
+        # ❌ API key in environment
+        - name: REACT_APP_API_KEY
+          value: "sk_live_abc123xyz789"  # ❌ Hardcoded API key!
+
+        # ❌ Running as root
+        securityContext:
+          privileged: true
+          runAsUser: 0
+          allowPrivilegeEscalation: true
+          readOnlyRootFilesystem: false
+
+        # ❌ No resource limits
+
+---
+# PostgreSQL (for testing - NOT production!)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: securebank
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14
+        ports:
+        - containerPort: 5432
+
+        env:
+        # ❌ PCI 8.2.1: Default credentials
+        - name: POSTGRES_DB
+          value: "securebank"
+        - name: POSTGRES_USER
+          value: "admin"
+        - name: POSTGRES_PASSWORD
+          value: "supersecret"  # ❌ Hardcoded!
+
+        # ❌ No persistence - data lost on restart!
+        # volumeMounts:
+        # - name: postgres-data
+        #   mountPath: /var/lib/postgresql/data
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: securebank
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+
+        # ❌ PCI 8.2.1: No Redis password!
+        # command: ["redis-server", "--requirepass", "$(REDIS_PASSWORD)"]
+
+        # ❌ No persistence
+
+---
+# ============================================================================
+# SECURE REFERENCE IMPLEMENTATION (For Learning)
+# ============================================================================
+#
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: securebank-backend-secure
+#   namespace: securebank
+# spec:
+#   replicas: 3
+#   template:
+#     spec:
+#       # ✅ Use dedicated service account
+#       serviceAccountName: securebank-backend
+#       automountServiceAccountToken: false
+#
+#       # ✅ No host namespace sharing
+#       hostNetwork: false
+#       hostPID: false
+#       hostIPC: false
+#
+#       # ✅ Pod security context
+#       securityContext:
+#         runAsNonRoot: true
+#         runAsUser: 1000
+#         fsGroup: 1000
+#         seccompProfile:
+#           type: RuntimeDefault
+#
+#       containers:
+#       - name: backend
+#         image: backend:tag
+#
+#         # ✅ Use secrets, not hardcoded values
+#         env:
+#         - name: DB_PASSWORD
+#           valueFrom:
+#             secretKeyRef:
+#               name: db-credentials
+#               key: password
+#
+#         # ✅ Resource limits
+#         resources:
+#           requests:
+#             memory: "256Mi"
+#             cpu: "250m"
+#           limits:
+#             memory: "512Mi"
+#             cpu: "500m"
+#
+#         # ✅ Secure container context
+#         securityContext:
+#           privileged: false
+#           allowPrivilegeEscalation: false
+#           runAsNonRoot: true
+#           runAsUser: 1000
+#           readOnlyRootFilesystem: true
+#           capabilities:
+#             drop:
+#               - ALL
+#
+#         # ✅ Health checks
+#         livenessProbe:
+#           httpGet:
+#             path: /health
+#             port: 3000
+#
+#         readinessProbe:
+#           httpGet:
+#             path: /ready
+#             port: 3000
+#
+#         # ✅ No host mounts
