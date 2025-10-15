@@ -105,14 +105,23 @@ spec:
           value: postgres
         - name: POSTGRES_DB
           value: securebank
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1000
+          runAsUser: 999  # PostgreSQL user
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-run
+          mountPath: /var/run/postgresql
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             cpu: 100m
@@ -120,6 +129,13 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
+      volumes:
+      - name: postgres-data
+        emptyDir: {}
+      - name: postgres-run
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -147,14 +163,21 @@ spec:
           containerPort: 6379
         command:
         - redis-server
+        - --dir
+        - /data
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1000
+          runAsUser: 999  # Redis user
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             cpu: 100m
@@ -162,3 +185,8 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
+      volumes:
+      - name: redis-data
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}

@@ -9,7 +9,7 @@
 // ============================================================================
 
 const { getPool } = require('../config/database');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 class Merchant {
     constructor(data) {

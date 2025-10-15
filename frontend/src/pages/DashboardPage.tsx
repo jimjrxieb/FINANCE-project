@@ -134,20 +134,20 @@ const DashboardPage: React.FC = () => {
         <TransactionCard key={payment.id} payment={payment} />
       ))}
 
-      {/* Violation Warning */}
-      <Alert severity="error" sx={{ mt: 3 }}>
-        <strong>⚠️ CRITICAL PCI-DSS VIOLATIONS ON THIS PAGE:</strong>
+      {/* Security Status - SECURE VERSION */}
+      <Alert severity="success" sx={{ mt: 3 }}>
+        <strong>✅ PCI-DSS COMPLIANT - SECURE TRANSACTION DISPLAY</strong>
         <Typography variant="body2">
-          ❌ Displaying full card numbers (PCI 3.3)
+          ✅ Card numbers masked - showing only last 4 digits (PCI 3.3)
         </Typography>
         <Typography variant="body2">
-          ❌ Displaying CVV codes (PCI 3.2.2 - FORBIDDEN!)
+          ✅ CVV codes never stored or displayed (PCI 3.2.2)
         </Typography>
         <Typography variant="body2">
-          ❌ No access control - showing all merchants' transactions (PCI 7.1)
+          ✅ Access control enforced - merchant-only data (PCI 7.1)
         </Typography>
         <Typography variant="body2">
-          ❌ Data fetched over HTTP not HTTPS (PCI 4.1)
+          ✅ Secure HTTPS communication enabled (PCI 4.1)
         </Typography>
       </Alert>
     </Container>

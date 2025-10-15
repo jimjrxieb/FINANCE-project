@@ -10,7 +10,7 @@ services:
   # LOCALSTACK - LOCAL AWS SERVICES
   # ==========================================================================
   localstack:
-    image: localstack/localstack:latest
+    image: localstack/localstack:3.0.2  # ✅ Pinned version instead of :latest
     container_name: securebank-localstack
     ports:
       - "4566:4566"
@@ -23,8 +23,13 @@ services:
       - SKIP_INFRA_DOWNLOADS=1
       - DISABLE_CUSTOM_CORS_S3=1
       - DISABLE_CUSTOM_CORS_APIGATEWAY=1
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - "localstack_data:/var/lib/localstack"
+      # ⚠️ SECURITY NOTE: Docker socket access required for localstack functionality
+      # This allows localstack to create containers for AWS service emulation
+      # Only use in local development, never in production
       - "/var/run/docker.sock:/var/run/docker.sock"
     networks:
       - securebank-net
@@ -40,37 +45,36 @@ services:
     container_name: securebank-api
     ports:
       - "3000:3000"
+    env_file:
+      - ./backend/.env
     environment:
       # LocalStack configuration
       USE_LOCALSTACK: "true"
       AWS_ENDPOINT_URL: http://localstack:4566
       AWS_REGION: us-east-1
 
-      # Database credentials
+      # Service hostnames (Docker internal)
       DATABASE_HOST: db
       DATABASE_PORT: 5432
-      DATABASE_NAME: securebank
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: postgres
-
-      # Redis configuration
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ""
-
-      # JWT secret
-      JWT_SECRET: secret123
-
-      # Admin credentials
-      ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: admin123
-
-      # Encryption key
-      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
 
       NODE_ENV: development
       PORT: 3000
-      LOG_SENSITIVE_DATA: "true"
+
+      # Note: Sensitive values loaded from backend/.env file:
+      # - DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME
+      # - REDIS_PASSWORD
+      # - JWT_SECRET
+      # - ADMIN_USERNAME, ADMIN_PASSWORD
+      # - ENCRYPTION_KEY
+      # - LOG_SENSITIVE_DATA
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/tmp
     depends_on:
       - db
       - redis
@@ -87,10 +91,18 @@ services:
     container_name: securebank-db
     ports:
       - "5432:5432"
+    env_file:
+      - ./backend/.env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: securebank
+      # Note: Sensitive values loaded from backend/.env:
+      # - POSTGRES_USER (from DATABASE_USER)
+      # - POSTGRES_PASSWORD (from DATABASE_PASSWORD)
+      # - POSTGRES_DB (from DATABASE_NAME)
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME:-securebank}
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -107,7 +119,14 @@ services:
     container_name: securebank-redis
     ports:
       - "6379:6379"
-    command: redis-server --requirepass ""
+    env_file:
+      - ./backend/.env
+    command: sh -c 'redis-server --requirepass "$${REDIS_PASSWORD:-}"'
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     volumes:
       - redis_data:/data
     networks:
@@ -123,6 +142,12 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/certs:/etc/nginx/certs:ro
@@ -136,13 +161,15 @@ services:
   # HASHICORP VAULT
   # ==========================================================================
   vault:
-    image: hashicorp/vault:latest
+    image: hashicorp/vault:1.15.4  # ✅ Pinned version instead of :latest
     container_name: securebank-vault
     ports:
       - "8200:8200"
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: root
       VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    security_opt:
+      - no-new-privileges:true
     cap_add:
       - IPC_LOCK
     networks:
@@ -163,6 +190,11 @@ services:
       # Frontend runs in browser, must use localhost not Docker hostname
       REACT_APP_API_URL: http://localhost:3000
       REACT_APP_ENV: development
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       - api
     networks:
@@ -173,7 +205,7 @@ services:
   # OPEN POLICY AGENT (OPA)
   # ==========================================================================
   opa:
-    image: openpolicyagent/opa:latest
+    image: openpolicyagent/opa:0.60.0  # ✅ Pinned version instead of :latest
     container_name: securebank-opa
     ports:
       - "8181:8181"
@@ -181,8 +213,13 @@ services:
       - "run"
       - "--server"
       - "--log-level=debug"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     volumes:
-      - ./opa-policies:/policies
+      - ./opa-policies:/policies:ro
     networks:
       - default
     restart: unless-stopped

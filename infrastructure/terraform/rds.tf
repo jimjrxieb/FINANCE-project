@@ -19,6 +19,34 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
+# ✅ PCI 10.1: DB parameter group with query logging enabled
+resource "aws_db_parameter_group" "postgres" {
+  count  = var.deployment_target == "aws" ? 1 : 0
+  name   = "${var.project_name}-postgres-params"
+  family = "postgres14"
+
+  # ✅ PCI 10.1: Enable query logging for audit trail
+  parameter {
+    name  = "log_statement"
+    value = "all"
+  }
+
+  parameter {
+    name  = "log_min_duration_statement"
+    value = "0"  # Log all queries
+  }
+
+  # ✅ PCI 4.1: Force SSL/TLS encryption in transit
+  parameter {
+    name  = "rds.force_ssl"
+    value = "1"  # Require SSL for all connections
+  }
+
+  tags = {
+    Name = "SecureBank PostgreSQL Parameters"
+  }
+}
+
 # ❌ CRITICAL: Public RDS storing CVV/PIN
 resource "aws_db_instance" "payment_db" {
   # LocalStack has limited RDS support
@@ -46,17 +74,21 @@ resource "aws_db_instance" "payment_db" {
 
   vpc_security_group_ids = [aws_security_group.database.id]  # ✅ Least-privilege SG
   db_subnet_group_name   = aws_db_subnet_group.main[0].name
+  parameter_group_name   = aws_db_parameter_group.postgres[0].name  # ✅ PCI 10.1: Query logging enabled
 
   # ❌ PCI 10.7: Backup retention too short
-  backup_retention_period = 90  # ✅ PCI-DSS 10.7 compliant
+  backup_retention_period = 35  # ✅ Maximum allowed (90 days would be better for PCI-DSS 10.7)
 
   # ❌ PCI 2.4: No automated patching
   auto_minor_version_upgrade = true  # ✅ PCI-DSS 2.4 - automated patching
 
-  # ❌ PCI 10.1: No enhanced monitoring
-  enabled_cloudwatch_logs_exports = ["postgresql"]  # ✅ PCI-DSS 10.1
+  # ✅ PCI 10.1: CloudWatch logging enabled
+  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]  # ✅ PCI-DSS 10.1
 
-  # ❌ Deletion protection disabled
+  # ✅ PCI 10.1: Copy tags to snapshots for audit trail
+  copy_tags_to_snapshot = true
+
+  # ✅ Deletion protection enabled
   deletion_protection = true  # ✅ Prevent accidental deletion
   skip_final_snapshot = true
 

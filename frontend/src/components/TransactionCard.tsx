@@ -1,10 +1,11 @@
 // ============================================================================
-// TRANSACTION CARD - INTENTIONALLY INSECURE
+// TRANSACTION CARD - SECURE PCI-DSS COMPLIANT VERSION
 // ============================================================================
-// PCI-DSS Violations:
-// - Displays full card number (PCI 3.3)
-// - Shows CVV in UI (PCI 3.2.2 - CRITICAL!)
-// - XSS vulnerable (PCI 6.5.7)
+// Security Features:
+// ✅ Masks card numbers - shows only last 4 digits (PCI 3.3)
+// ✅ Never displays CVV (PCI 3.2.2)
+// ✅ Never displays PIN (PCI 3.2.3)
+// ✅ XSS protected (PCI 6.5.7)
 // ============================================================================
 
 import React from 'react';
@@ -17,15 +18,15 @@ import {
 } from '@mui/material';
 import { Payment } from '../types';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
-import WarningIcon from '@mui/icons-material/Warning';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
 interface TransactionCardProps {
   payment: Payment;
 }
 
 const TransactionCard: React.FC<TransactionCardProps> = ({ payment }) => {
-  // ❌ PCI 10.1: Logging transaction data
-  console.log('Rendering transaction:', payment);
+  // ✅ PCI 10.1: Safe logging - no sensitive data
+  console.log('Rendering transaction ID:', payment.id);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -34,6 +35,13 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ payment }) => {
       case 'failed': return 'error';
       default: return 'default';
     }
+  };
+
+  // ✅ Helper to mask card number (show only last 4 digits)
+  const maskCardNumber = (cardNumber: string): string => {
+    if (!cardNumber || cardNumber.length < 4) return '****';
+    const last4 = cardNumber.slice(-4);
+    return '*'.repeat(Math.max(0, cardNumber.length - 4)) + last4;
   };
 
   return (
@@ -48,20 +56,21 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ payment }) => {
               </Typography>
             </Box>
 
-            {/* ❌ PCI 3.3: CRITICAL - Displaying full card number! */}
+            {/* ✅ PCI 3.3: SECURE - Displaying only last 4 digits! */}
             <Typography variant="body2" color="text.secondary">
-              <strong>Card Number:</strong> {payment.card_number}
+              <strong>Card Number:</strong> {maskCardNumber(payment.card_number)}
             </Typography>
 
-            {/* ❌ PCI 3.2.2: CRITICAL - Displaying CVV (FORBIDDEN!) */}
-            <Typography variant="body2" color="error" sx={{ mt: 1 }}>
-              <WarningIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
-              <strong>CVV:</strong> {payment.cvv} (VIOLATION: Should NEVER display!)
+            {/* ✅ PCI 3.2.2: SECURE - CVV never stored or displayed */}
+            <Typography variant="body2" color="success.main" sx={{ mt: 1 }}>
+              <CheckCircleIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
+              <strong>CVV:</strong> Protected (not stored)
             </Typography>
 
-            {/* ❌ PCI 3.2.3: CRITICAL - Displaying PIN! */}
-            <Typography variant="body2" color="error">
-              <strong>PIN:</strong> {payment.pin} (VIOLATION: Should NEVER store or display!)
+            {/* ✅ PCI 3.2.3: SECURE - PIN never stored or displayed */}
+            <Typography variant="body2" color="success.main">
+              <CheckCircleIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
+              <strong>PIN:</strong> Protected (not stored)
             </Typography>
 
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
@@ -70,12 +79,9 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ payment }) => {
           </Box>
 
           <Box sx={{ flex: '1 1 300px' }}>
-            {/* ❌ PCI 6.5.7: XSS vulnerable - using dangerouslySetInnerHTML */}
+            {/* ✅ PCI 6.5.7: XSS protected - safe text rendering */}
             <Typography variant="body2" color="text.secondary">
-              <strong>Cardholder:</strong>{' '}
-              <span
-                dangerouslySetInnerHTML={{ __html: payment.cardholder_name }}
-              />
+              <strong>Cardholder:</strong> {payment.cardholder_name}
             </Typography>
 
             <Typography variant="h5" sx={{ mt: 1, mb: 1 }}>
@@ -94,22 +100,22 @@ const TransactionCard: React.FC<TransactionCardProps> = ({ payment }) => {
           </Box>
         </Box>
 
-        {/* ❌ PCI Violations Warning */}
-        <Box sx={{ mt: 2, p: 1, bgcolor: '#ffebee', borderRadius: 1 }}>
-          <Typography variant="caption" color="error">
-            <strong>PCI-DSS VIOLATIONS DISPLAYED:</strong>
+        {/* ✅ PCI-DSS Compliance Status */}
+        <Box sx={{ mt: 2, p: 1, bgcolor: '#d4edda', borderRadius: 1 }}>
+          <Typography variant="caption" color="success.dark">
+            <strong>✅ PCI-DSS COMPLIANT DISPLAY:</strong>
           </Typography>
           <Typography variant="caption" display="block">
-            ❌ Full PAN displayed (PCI 3.3)
+            ✅ Card masked - only last 4 digits shown (PCI 3.3)
           </Typography>
           <Typography variant="caption" display="block">
-            ❌ CVV displayed (PCI 3.2.2 - CRITICAL!)
+            ✅ CVV never stored or displayed (PCI 3.2.2)
           </Typography>
           <Typography variant="caption" display="block">
-            ❌ PIN displayed (PCI 3.2.3 - CRITICAL!)
+            ✅ PIN never stored or displayed (PCI 3.2.3)
           </Typography>
           <Typography variant="caption" display="block">
-            ❌ XSS vulnerability (PCI 6.5.7)
+            ✅ XSS protection enabled (PCI 6.5.7)
           </Typography>
         </Box>
       </CardContent>

@@ -22,6 +22,7 @@ provider "aws" {
       eks            = var.localstack_endpoint
       ecr            = var.localstack_endpoint
       sts            = var.localstack_endpoint
+      kms            = var.localstack_endpoint
     }
   }
 
@@ -29,6 +30,7 @@ provider "aws" {
   skip_credentials_validation = var.deployment_target == "localstack"
   skip_metadata_api_check     = var.deployment_target == "localstack"
   skip_requesting_account_id  = var.deployment_target == "localstack"
+  s3_use_path_style           = var.deployment_target == "localstack"
 
   # LocalStack uses fake credentials
   access_key = var.deployment_target == "localstack" ? "test" : null

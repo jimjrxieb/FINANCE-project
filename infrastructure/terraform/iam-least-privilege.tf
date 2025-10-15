@@ -49,7 +49,7 @@ resource "aws_iam_policy" "backend_s3" {
         ]
         Resource = [
           aws_s3_bucket.payment_receipts.arn,
-          aws_s3_bucket.user_documents.arn
+          aws_s3_bucket.audit_logs.arn
         ]
       },
       {
@@ -62,7 +62,7 @@ resource "aws_iam_policy" "backend_s3" {
         ]
         Resource = [
           "${aws_s3_bucket.payment_receipts.arn}/*",
-          "${aws_s3_bucket.user_documents.arn}/*"
+          "${aws_s3_bucket.audit_logs.arn}/*"
         ]
       }
     ]
@@ -114,8 +114,9 @@ resource "aws_iam_policy" "backend_secrets" {
   }
 }
 
-# RDS access policy (specific database only)
+# RDS access policy (specific database only) - only on AWS
 resource "aws_iam_policy" "backend_rds" {
+  count       = var.deployment_target == "aws" ? 1 : 0
   name        = "${var.project_name}-backend-rds"
   description = "RDS access - describe only (connection via creds)"
 
@@ -130,7 +131,7 @@ resource "aws_iam_policy" "backend_rds" {
           "rds:DescribeDBClusters"
         ]
         Resource = [
-          aws_db_instance.postgres.arn
+          aws_db_instance.payment_db[0].arn
         ]
       }
     ]
@@ -182,8 +183,9 @@ resource "aws_iam_role_policy_attachment" "backend_secrets" {
 }
 
 resource "aws_iam_role_policy_attachment" "backend_rds" {
+  count      = var.deployment_target == "aws" ? 1 : 0
   role       = aws_iam_role.backend.name
-  policy_arn = aws_iam_policy.backend_rds.arn
+  policy_arn = aws_iam_policy.backend_rds[0].arn
 }
 
 resource "aws_iam_role_policy_attachment" "backend_logs" {

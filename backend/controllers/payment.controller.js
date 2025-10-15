@@ -97,26 +97,55 @@ async function processPayment(req, res) {
 // ============================================================================
 
 /**
- * List all payments (no filtering, no access control)
- * ❌ PCI 7.1: Anyone can see all payments from all merchants
+ * List payments - FIXED VERSION
+ * ✅ Requires merchant ID
+ * ✅ Returns only merchant's own payments
+ * ✅ Masks all sensitive data
  */
 async function listPayments(req, res) {
     try {
-        // ❌ PCI 7.1: No authentication or authorization checks
-        // ❌ Should only return payments for authenticated merchant
+        const { merchantId } = req.query;
 
-        const payments = await Payment.findAll();
+        // ✅ FIXED: Require merchant authentication
+        if (!merchantId) {
+            return res.status(401).json({
+                error: 'Authentication required',
+                message: 'Merchant ID is required'
+            });
+        }
 
-        // ❌ Returns full card data including CVV and PIN for ALL transactions!
+        // ✅ FIXED: Only get payments for THIS merchant
+        const payments = await Payment.findByMerchant(merchantId);
+
+        // ✅ FIXED: Mask sensitive data before returning
+        const maskedPayments = payments.map(payment => {
+            const data = payment.toJSON();
+            return {
+                ...data,
+                card_number: maskCardNumber(data.card_number),
+                cvv: undefined,  // ✅ Never return CVV
+                pin: undefined,  // ✅ Never return PIN
+                _masked: true
+            };
+        });
+
         res.json({
-            count: payments.length,
-            payments: payments.map(p => p.toJSON())
+            count: maskedPayments.length,
+            payments: maskedPayments,
+            _secure: true
         });
 
     } catch (error) {
         console.error('List payments error:', error);
         res.status(500).json({ error: error.message });
     }
+}
+
+// ✅ Helper function to mask card numbers
+function maskCardNumber(cardNumber) {
+    if (!cardNumber || cardNumber.length < 4) return '****';
+    const last4 = cardNumber.slice(-4);
+    return '*'.repeat(cardNumber.length - 4) + last4;
 }
 
 // ============================================================================

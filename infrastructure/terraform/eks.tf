@@ -3,12 +3,12 @@
 # ============================================================================
 # ❌ PCI 2.2.1: EKS cluster with public endpoint
 # ❌ PCI 10.1: Control plane logging disabled
-  ❌ PCI 3.4: No envelope encryption for secrets
-  ❌ PCI 2.4: No automated patching
-  ============================================================================
+# ❌ PCI 3.4: No envelope encryption for secrets
+# ❌ PCI 2.4: No automated patching
+# ============================================================================
 
 resource "aws_eks_cluster" "main" {
-  LocalStack has limited EKS support - only deploy on real AWS
+  # LocalStack has limited EKS support - only deploy on real AWS
   count = var.deployment_target == "aws" ? 1 : 0
 
   name     = "${var.project_name}-eks"
@@ -19,14 +19,14 @@ resource "aws_eks_cluster" "main" {
     subnet_ids              = [aws_subnet.public_1.id, aws_subnet.public_2.id]
     endpoint_private_access = true   # ✅ Private access enabled
     endpoint_public_access  = false  # ✅ Public access disabled
-  public_access_cidrs     = ["0.0.0.0/0"]  # Disabled - no public access
+    # public_access_cidrs     = ["0.0.0.0/0"]  # Disabled - no public access
     security_group_ids      = [aws_security_group.eks_cluster.id]  # ✅ Least-privilege SG
   }
 
-  ❌ PCI 10.1: Control plane logging disabled
+  # ❌ PCI 10.1: Control plane logging disabled
   enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]  # ✅ PCI-DSS 10.1
 
-  ❌ PCI 3.4: No envelope encryption for secrets
+  # ❌ PCI 3.4: No envelope encryption for secrets
   encryption_config {
     provider {
       key_arn = aws_kms_key.securebank.arn  # ✅ Envelope encryption

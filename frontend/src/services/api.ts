@@ -138,11 +138,19 @@ export const paymentAPI = {
     return response.data;
   },
 
-  // ❌ PCI 7.1: No access control - fetches all payments
-  listPayments: async (): Promise<Payment[]> => {
-    const response = await api.get<{ payments: Payment[] }>('/api/payments/list');
+  // ✅ FIXED: Access control - fetches only merchant's payments
+  listPayments: async (merchantId?: number): Promise<Payment[]> => {
+    // ✅ FIXED: Send merchantId as query parameter for access control
+    const merchant = authAPI.getCurrentMerchant();
+    const id = merchantId || merchant?.id;
 
-    // ❌ Receiving full card data including CVV/PIN in response
+    if (!id) {
+      throw new Error('Merchant ID required');
+    }
+
+    const response = await api.get<{ payments: Payment[] }>(`/api/payments/list?merchantId=${id}`);
+
+    // ✅ FIXED: Backend now returns masked data only
     return response.data.payments;
   },
 
