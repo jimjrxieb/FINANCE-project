@@ -31,13 +31,34 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // ROUTES
 // ============================================================================
 
-const paymentRoutes = require('./routes/payment.routes');
+const paymentRoutes = require('./routes/payment.routes.secure');
 const merchantRoutes = require('./routes/merchant.routes');
 const authRoutes = require('./routes/auth.routes');
+const cardsRoutes = require('./routes/cards.routes');
+const merchantApiRoutes = require('./routes/merchant.api.routes');
 
+// Phase 4 Neobank APIs
+const p2pRoutes = require('./routes/p2p.routes');
+const fraudRoutes = require('./routes/fraud.routes');
+const adminRoutes = require('./routes/admin.routes');
+
+// Payment routes (SECURE VERSION - Phase 2 fixed)
 app.use('/api/payments', paymentRoutes);
+
+// Card management routes (VULNERABLE)
+app.use('/api/cards', cardsRoutes);
+
+// Merchant API routes (VULNERABLE)
+app.use('/api/v1', merchantApiRoutes);
+
+// Legacy routes
 app.use('/api/merchants', merchantRoutes);
 app.use('/api/auth', authRoutes);
+
+// Phase 4 Neobank feature routes
+app.use('/api/v1/p2p', p2pRoutes);
+app.use('/api/v1/fraud', fraudRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -61,7 +82,7 @@ app.get('/debug/config', (req, res) => {
 app.get('/', (req, res) => {
     res.json({
         message: 'SecureBank Payment API',
-        version: '1.0.0',
+        version: '2.0.0-phase4',
         endpoints: [
             '/api/auth/login',
             '/api/auth/register',
@@ -70,7 +91,23 @@ app.get('/', (req, res) => {
             '/api/merchants/:id/transactions',
             '/health',
             '/debug/config'
-        ]
+        ],
+        secure_endpoints: [
+            '✅ /api/payments/secure/process - PCI-DSS compliant payment processing',
+            '✅ /api/payments/secure/list - Masked payment data',
+            '✅ /api/payments/secure/:id - Secure payment details'
+        ],
+        phase4_endpoints: [
+            '❌ /api/v1/p2p/send - P2P money transfer (VULNERABLE)',
+            '❌ /api/v1/p2p/history/:user_id - Transfer history (VULNERABLE)',
+            '❌ /api/v1/fraud/check-transaction - Real-time fraud scoring (VULNERABLE)',
+            '❌ /api/v1/fraud/alerts - List fraud alerts (VULNERABLE)',
+            '❌ /api/v1/admin/dashboard/stats - System metrics (NO AUTH)',
+            '❌ /api/v1/admin/users/list - List all users (NO AUTH)',
+            '❌ /api/v1/admin/users/:id/full-details - Full PAN/CVV exposed (CRITICAL)',
+            '❌ /api/v1/admin/merchants/list - Plaintext API keys (CRITICAL)'
+        ],
+        note: 'Phase 4 endpoints are INTENTIONALLY VULNERABLE for security demonstration'
     });
 });
 
