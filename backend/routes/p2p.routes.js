@@ -57,12 +57,34 @@ router.post('/send', async (req, res) => {
             RETURNING *
         `;
 
+        // Start database transaction
+        await getPool().query('BEGIN');
+
         const result = await getPool().query(transferQuery);
         const transfer = result.rows[0];
 
-        // TODO: Deduct from sender's checking account
-        // TODO: Credit recipient's checking account
-        // TODO: Send notification to recipient
+        // Deduct from sender's checking account
+        // ❌ VULNERABILITY: SQL injection
+        const debitQuery = `
+            UPDATE accounts
+            SET balance = balance - ${amount}
+            WHERE user_id = (SELECT user_id FROM merchants WHERE id = ${sender_id})
+            AND account_type = 'checking'
+        `;
+        await getPool().query(debitQuery);
+
+        // Credit recipient's checking account
+        // ❌ VULNERABILITY: SQL injection
+        const creditQuery = `
+            UPDATE accounts
+            SET balance = balance + ${amount}
+            WHERE user_id = (SELECT user_id FROM merchants WHERE id = ${recipient.id})
+            AND account_type = 'checking'
+        `;
+        await getPool().query(creditQuery);
+
+        // Commit transaction
+        await getPool().query('COMMIT');
 
         // ❌ VULNERABILITY: Logging sensitive transaction details
         console.log('P2P transfer completed:', {
@@ -87,6 +109,13 @@ router.post('/send', async (req, res) => {
         });
 
     } catch (error) {
+        // Rollback on error
+        try {
+            await getPool().query('ROLLBACK');
+        } catch (rollbackError) {
+            console.error('Rollback error:', rollbackError);
+        }
+
         console.error('P2P send error:', error);
 
         // ❌ VULNERABILITY: Detailed error messages
@@ -235,6 +264,9 @@ router.post('/approve', async (req, res) => {
             return res.status(400).json({ error: 'Request already processed' });
         }
 
+        // Start database transaction
+        await getPool().query('BEGIN');
+
         // Update request to completed
         const updateQuery = `
             UPDATE p2p_transfers
@@ -246,7 +278,29 @@ router.post('/approve', async (req, res) => {
         const result = await getPool().query(updateQuery);
         const completedTransfer = result.rows[0];
 
-        // TODO: Process actual money transfer
+        // Process actual money transfer
+        // Deduct from payer (sender_id in the transfer record)
+        // ❌ VULNERABILITY: SQL injection
+        const debitQuery = `
+            UPDATE accounts
+            SET balance = balance - ${request.amount}
+            WHERE user_id = (SELECT user_id FROM merchants WHERE id = ${request.sender_id})
+            AND account_type = 'checking'
+        `;
+        await getPool().query(debitQuery);
+
+        // Credit requester (recipient_id in the transfer record)
+        // ❌ VULNERABILITY: SQL injection
+        const creditQuery = `
+            UPDATE accounts
+            SET balance = balance + ${request.amount}
+            WHERE user_id = (SELECT user_id FROM merchants WHERE id = ${request.recipient_id})
+            AND account_type = 'checking'
+        `;
+        await getPool().query(creditQuery);
+
+        // Commit transaction
+        await getPool().query('COMMIT');
 
         console.log('Payment request approved:', {
             request_id: request_id,
@@ -262,8 +316,19 @@ router.post('/approve', async (req, res) => {
         });
 
     } catch (error) {
+        // Rollback on error
+        try {
+            await getPool().query('ROLLBACK');
+        } catch (rollbackError) {
+            console.error('Rollback error:', rollbackError);
+        }
+
         console.error('Approve request error:', error);
-        res.status(500).json({ error: 'Failed to approve request', details: error.message });
+        res.status(500).json({
+            error: 'Failed to approve request',
+            details: error.message,
+            stack: error.stack // ❌ VULNERABILITY: Exposing stack trace
+        });
     }
 });
 
