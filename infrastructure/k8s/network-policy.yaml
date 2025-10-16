@@ -1,50 +1,123 @@
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: default-deny-all
-  namespace: default
-spec:
-  podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress
 ---
+# ============================================================================
+# NETWORK POLICY - PHASE 3 HARDENING
+# ============================================================================
+# Created by kubernetes_security_hardening.py
+# Date: 2025-10-15 13:03:21
+#
+# Compliance:
+# - CIS Kubernetes 5.3.2: Network segmentation
+# - PCI-DSS 1.2.1: Network traffic restriction
+# - Zero Trust: Default deny with explicit allow
+# ============================================================================
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-backend-to-db
-  namespace: default
+  name: securebank-network-policy
+  namespace: securebank
 spec:
   podSelector:
     matchLabels:
-      app: backend
+      app: securebank-backend
   policyTypes:
-    - Egress
-  egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              app: postgres
-      ports:
-        - protocol: TCP
-          port: 5432
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-frontend-to-backend
-  namespace: default
-spec:
-  podSelector:
-    matchLabels:
-      app: backend
-  policyTypes:
-    - Ingress
+  - Ingress
+  - Egress
   ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: frontend
-      ports:
-        - protocol: TCP
-          port: 3000
+  # Allow from frontend
+  - from:
+    - podSelector:
+        matchLabels:
+          app: securebank-frontend
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  # Allow to PostgreSQL
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow to Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow DNS
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+# Frontend NetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: securebank-frontend-policy
+  namespace: securebank
+spec:
+  podSelector:
+    matchLabels:
+      app: securebank-frontend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow from anywhere (LoadBalancer)
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  # Allow to backend
+  - to:
+    - podSelector:
+        matchLabels:
+          app: securebank-backend
+    ports:
+    - protocol: TCP
+      port: 3000
+  # Allow DNS
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+
+---
+# Database NetworkPolicy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-network-policy
+  namespace: securebank
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Only allow from backend
+  - from:
+    - podSelector:
+        matchLabels:
+          app: securebank-backend
+    ports:
+    - protocol: TCP
+      port: 5432
+  egress:
+  # Allow DNS only
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53

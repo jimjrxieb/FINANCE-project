@@ -1,0 +1,526 @@
+# ============================================================================
+# FINANCE-PROJECT (SecureBank) - KUBERNETES PRODUCTION DEPLOYMENT
+# ============================================================================
+# Complete deployment with real application code, security hardening, and
+# PCI-DSS compliance measures
+# ============================================================================
+
+---
+# ConfigMap for backend configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: securebank
+data:
+  DATABASE_HOST: "postgres-service"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "securebank"
+  DATABASE_USER: "postgres"
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  NODE_ENV: "production"
+  PORT: "3000"
+  LOG_LEVEL: "info"
+  LOG_SENSITIVE_DATA: "true"  # Intentional violation for demo
+  USE_LOCALSTACK: "false"
+
+---
+# Secret for sensitive data (base64 encoded)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-secrets
+  namespace: securebank
+type: Opaque
+stringData:
+  DATABASE_PASSWORD: "postgres"  # ❌ PCI 2.1: Default password (intentional for demo)
+  JWT_SECRET: "insecure_jwt_secret_for_demo_only_12345"  # ❌ Weak secret
+  REDIS_PASSWORD: ""
+  ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+---
+# Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: securebank-backend
+  namespace: securebank
+  labels:
+    app: securebank
+    component: backend
+    tier: application
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: securebank
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: securebank
+        component: backend
+        tier: application
+    spec:
+      containers:
+      - name: backend
+        image: securebank-backend:latest
+        imagePullPolicy: Never  # Use locally loaded image
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        env:
+        # Load configuration from ConfigMap
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DATABASE_HOST
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DATABASE_PORT
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DATABASE_NAME
+        - name: DATABASE_USER
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: DATABASE_USER
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: REDIS_PORT
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: NODE_ENV
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: PORT
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: LOG_LEVEL
+        - name: LOG_SENSITIVE_DATA
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: LOG_SENSITIVE_DATA
+        - name: USE_LOCALSTACK
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: USE_LOCALSTACK
+        # Load secrets from Secret
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: backend-secrets
+              key: DATABASE_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: backend-secrets
+              key: JWT_SECRET
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: backend-secrets
+              key: REDIS_PASSWORD
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backend-secrets
+              key: ENCRYPTION_KEY
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        # Security Context: Run as non-root with read-only filesystem
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        # Volume mounts for writable directories
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: npm-cache
+          mountPath: /.npm
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: npm-cache
+        emptyDir: {}
+
+---
+# Backend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: securebank-backend-service
+  namespace: securebank
+  labels:
+    app: securebank
+    component: backend
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: securebank
+    component: backend
+
+---
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: securebank-frontend
+  namespace: securebank
+  labels:
+    app: securebank
+    component: frontend
+    tier: presentation
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: securebank
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: securebank
+        component: frontend
+        tier: presentation
+    spec:
+      containers:
+      - name: frontend
+        image: securebank-frontend:latest
+        imagePullPolicy: Never  # Use locally loaded image
+        ports:
+        - name: http
+          containerPort: 3001
+          protocol: TCP
+        env:
+        - name: REACT_APP_API_URL
+          value: "http://localhost:3000"  # Will be accessed via port-forward
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3001
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        # Security Context: Run as non-root with read-only filesystem
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: serve-cache
+          mountPath: /.serve
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: serve-cache
+        emptyDir: {}
+
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: securebank-frontend-service
+  namespace: securebank
+  labels:
+    app: securebank
+    component: frontend
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 3001
+    protocol: TCP
+    name: http
+  selector:
+    app: securebank
+    component: frontend
+
+---
+# PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: securebank
+  labels:
+    app: postgres
+    tier: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        tier: database
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+        env:
+        - name: POSTGRES_DB
+          value: "securebank"
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "postgres"  # ❌ PCI 2.1: Default password (intentional for demo)
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        # Security Context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 999  # PostgreSQL user in alpine image
+          runAsGroup: 999
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-run
+          mountPath: /var/run/postgresql
+        - name: tmp
+          mountPath: /tmp
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+      volumes:
+      - name: postgres-data
+        emptyDir: {}  # For demo - use PersistentVolume in production
+      - name: postgres-run
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: securebank
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  selector:
+    app: postgres
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: securebank
+  labels:
+    app: redis
+    tier: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        tier: cache
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+        command:
+        - redis-server
+        - --dir
+        - /data
+        - --save
+        - "60"
+        - "1"
+        ports:
+        - name: redis
+          containerPort: 6379
+          protocol: TCP
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        # Security Context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 999  # Redis user in alpine image
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: tmp
+          mountPath: /tmp
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      volumes:
+      - name: redis-data
+        emptyDir: {}  # For demo - use PersistentVolume in production
+      - name: tmp
+        emptyDir: {}
+
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: securebank
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  selector:
+    app: redis

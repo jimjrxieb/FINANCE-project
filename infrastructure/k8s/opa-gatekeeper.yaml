@@ -47,6 +47,12 @@ spec:
       labels:
         app: opa
     spec:
+      # ✅ PCI 2.2.4: Pod security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
       containers:
       - name: opa
         image: openpolicyagent/opa:latest
@@ -59,20 +65,29 @@ spec:
         - "--log-level=debug"
         - "--addr=0.0.0.0:8181"
 
-        # ❌ PCI 2.2.4: No security context
-        # securityContext:
-        #   runAsNonRoot: true
-        #   runAsUser: 1000
+        # ✅ PCI 2.2.4: Container security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
 
         volumeMounts:
         - name: policies
           mountPath: /policies
           readOnly: true
+        - name: tmp
+          mountPath: /tmp
 
       volumes:
       - name: policies
         configMap:
           name: opa-policies
+      - name: tmp
+        emptyDir: {}
 
 ---
 # OPA Service

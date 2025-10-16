@@ -39,3 +39,20 @@ Thumbs.db
 *.pem
 *.key
 secrets/
+
+# Kubernetes Secrets (contains sensitive data)
+infrastructure/k8s/secrets.yaml
+k8s/secrets.yaml
+
+# Terraform state files (may contain secrets)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+terraform.tfstate
+terraform.tfstate.backup
+
+# All backup directories
+*.backup/
+*.backup.*
+backup/
+

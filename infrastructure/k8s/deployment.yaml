@@ -1,21 +1,27 @@
+# ============================================================================
+# NAMESPACE - DEDICATED FOR SECUREBANK
+# ============================================================================
+# ✅ Best practice: Use dedicated namespaces for logical separation
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: securebank
+  labels:
+    name: securebank
+    app: securebank
+    compliance: pci-dss
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: securebank-backend
-  namespace: securebank
+  namespace: securebank  # ✅ Dedicated namespace instead of default
   labels:
     app: securebank
     component: backend
-    tier: api
-    security: insecure
-    contains: cvv-pin-data
 spec:
-  replicas: 3
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+  replicas: 2
   selector:
     matchLabels:
       app: securebank
@@ -25,95 +31,112 @@ spec:
       labels:
         app: securebank
         component: backend
-        tier: api
-      annotations:
-        prometheus.io/scrape: 'true'
-        prometheus.io/port: '3000'
-        prometheus.io/path: /metrics
     spec:
-      automountServiceAccountToken: true
-      hostNetwork: false
-      hostPID: false
-      hostIPC: false
+      serviceAccountName: securebank-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: backend
-        image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/securebank/backend:IMAGE_TAG
-        imagePullPolicy: Always
+        image: securebank/backend:v1.0.0
         ports:
-        - name: http
-          containerPort: 3000
+        - containerPort: 3000
           protocol: TCP
         env:
-        - name: DB_HOST
-          value: securebank-payment-db.c9abc123xyz.us-east-1.rds.amazonaws.com
-        - name: DB_USER
-          value: admin
+        # ✅ FIXED: Using Kubernetes Secrets instead of hardcoded values
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: securebank-secrets
+              key: DB_USERNAME
         - name: DB_PASSWORD
-          value: supersecret
+          valueFrom:
+            secretKeyRef:
+              name: securebank-secrets
+              key: DB_PASSWORD
         - name: DB_NAME
-          value: securebank
-        - name: DB_PORT
-          value: '5432'
-        - name: REDIS_HOST
-          value: redis-service
-        - name: REDIS_PASSWORD
-          value: ''
+          valueFrom:
+            secretKeyRef:
+              name: securebank-secrets
+              key: DB_NAME
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: securebank-secrets
+              key: DB_HOST
         - name: JWT_SECRET
-          value: weak-secret-change-in-production
+          valueFrom:
+            secretKeyRef:
+              name: securebank-secrets
+              key: JWT_SECRET
         - name: AWS_REGION
           value: us-east-1
         - name: AWS_ACCESS_KEY_ID
-          value: AKIAIOSFODNN7EXAMPLE
+          valueFrom:
+            secretKeyRef:
+              name: securebank-secrets
+              key: AWS_ACCESS_KEY_ID
         - name: AWS_SECRET_ACCESS_KEY
-          value: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+          valueFrom:
+            secretKeyRef:
+              name: securebank-secrets
+              key: AWS_SECRET_ACCESS_KEY
         - name: S3_PAYMENT_BUCKET
           value: securebank-payment-receipts-production
         - name: S3_AUDIT_BUCKET
           value: securebank-audit-logs-production
-        - name: NODE_ENV
-          value: production
-        - name: DEBUG
-          value: 'true'
         securityContext:
-          privileged: false
           allowPrivilegeEscalation: false
-          runAsUser: 1000
-          runAsNonRoot: true
           readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          seccompProfile:
+            type: RuntimeDefault
           capabilities:
             drop:
             - ALL
-        volumeMounts:
-        - name: host-root
-          mountPath: /host
-        - name: docker-socket
-          mountPath: /var/run/docker.sock
         resources:
           requests:
-            cpu: 100m
-            memory: 128Mi
+            memory: "256Mi"
+            cpu: "250m"
           limits:
-            cpu: 500m
-            memory: 512Mi
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: var-tmp
+          mountPath: /var/tmp
       volumes:
-      - name: host-root
-        hostPath:
-          path: /
-          type: Directory
-      - name: docker-socket
-        hostPath:
-          path: /var/run/docker.sock
-          type: Socket
+      - name: tmp
+        emptyDir: {}
+      - name: var-tmp
+        emptyDir: {}
+
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: securebank-frontend
-  namespace: securebank
+  namespace: securebank  # ✅ Dedicated namespace instead of default
   labels:
     app: securebank
     component: frontend
-    tier: web
 spec:
   replicas: 2
   selector:
@@ -125,121 +148,56 @@ spec:
       labels:
         app: securebank
         component: frontend
-        tier: web
     spec:
-      automountServiceAccountToken: true
-      hostNetwork: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: frontend
-        image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/securebank/frontend:IMAGE_TAG
-        imagePullPolicy: Always
+        image: securebank/frontend:v1.0.0
         ports:
-        - name: http
-          containerPort: 3001
+        - containerPort: 80
           protocol: TCP
         env:
         - name: REACT_APP_API_URL
           value: http://securebank-backend-service:3000
+        # ✅ FIXED: Stripe key moved to Secret
         - name: REACT_APP_API_KEY
-          value: sk_live_abc123xyz789
+          valueFrom:
+            secretKeyRef:
+              name: securebank-secrets
+              key: REACT_APP_API_KEY
         securityContext:
-          privileged: false
-          runAsUser: 1000
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
           runAsNonRoot: true
+          runAsUser: 1000
+          seccompProfile:
+            type: RuntimeDefault
           capabilities:
             drop:
             - ALL
         resources:
           requests:
-            cpu: 100m
-            memory: 128Mi
+            memory: "128Mi"
+            cpu: "100m"
           limits:
-            cpu: 500m
-            memory: 512Mi
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: postgres
-  namespace: securebank
-  labels:
-    app: postgres
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: postgres
-  template:
-    metadata:
-      labels:
-        app: postgres
-    spec:
-      containers:
-      - name: postgres
-        image: postgres:14
-        ports:
-        - containerPort: 5432
-        env:
-        - name: POSTGRES_DB
-          value: securebank
-        - name: POSTGRES_USER
-          value: admin
-        - name: POSTGRES_PASSWORD
-          value: supersecret
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-            - ALL
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: redis
-  namespace: securebank
-  labels:
-    app: redis
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: redis
-  template:
-    metadata:
-      labels:
-        app: redis
-    spec:
-      containers:
-      - name: redis
-        image: redis:7-alpine
-        ports:
-        - containerPort: 6379
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          capabilities:
-            drop:
-            - ALL
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
---- null
-...
+            memory: "256Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: var-tmp
+          mountPath: /var/tmp
+        - name: cache
+          mountPath: /usr/share/nginx/html/.cache
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: var-tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}

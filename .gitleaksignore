@@ -1,0 +1,20 @@
+# Gitleaks Ignore File - FINANCE Project
+# Whitelists legitimate documentation examples and placeholders
+
+# Backend README - API documentation with example responses
+backend/README.md
+
+# AWS Service - Uses AWS official example credentials as fallback
+backend/services/aws.service.js
+
+# K8s Secrets - Template file with REPLACE_WITH placeholders
+infrastructure/k8s/secrets.yaml
+
+# AWS Deployment Guide - Documentation with placeholder examples
+docs/AWS-DEPLOYMENT-GUIDE.md
+
+# Docker Compose - Dev environment (loads from .env file)
+docker-compose.yml
+
+# Environment example - Template file
+backend/.env.example

@@ -109,7 +109,7 @@ Response:
 {
   "merchant_id": 1,
   "username": "merchant1",
-  "api_key": "sk_live_abc123...",
+  "api_key": "sk_live_xxxxxxxxxxxxx",
   "created_at": "2025-10-08T14:30:00.000Z"
 }
 ```
@@ -129,7 +129,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 Response:
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example_jwt_token_here",
   "merchant": {
     "id": 1,
     "username": "merchant1",
@@ -322,11 +322,12 @@ S3_AUDIT_BUCKET=securebank-audit-logs-local
 ```
 
 #### Secrets (Local Development)
+**⚠️ NEVER use these values in production! Generate unique secrets.**
 ```bash
-JWT_SECRET=secret123              # JWT signing key
-ADMIN_USERNAME=admin              # Default admin username
-ADMIN_PASSWORD=admin123           # Default admin password
-ENCRYPTION_KEY=0123456789abcdef0123456789abcdef
+JWT_SECRET=<GENERATE_STRONG_SECRET>              # JWT signing key (use: openssl rand -hex 32)
+ADMIN_USERNAME=<UNIQUE_ADMIN_USER>              # Unique admin username
+ADMIN_PASSWORD=<STRONG_PASSWORD>                # Strong password from password manager
+ENCRYPTION_KEY=<GENERATE_AES256_KEY>            # AES-256 key (use: openssl rand -hex 32)
 ```
 
 ### Security Modes

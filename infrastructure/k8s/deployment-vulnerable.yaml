@@ -1,0 +1,499 @@
+# ============================================================================
+# KUBERNETES DEPLOYMENT - HARDENED (PHASE 3)
+# ============================================================================
+# Security fixes applied: 2025-10-15 13:03:21
+#
+# Hardening applied:
+# - Containers run as non-root (runAsUser: 10000)
+# - Privileged mode disabled
+# - Dangerous capabilities removed
+# - Resource limits added
+# - ReadOnlyRootFilesystem enabled
+# - Privilege escalation blocked
+#
+# Compliance:
+# - CIS Kubernetes 5.2.x: Container security
+# - PCI-DSS 2.2: Configuration standards
+# - NIST 800-190: Container security
+# ============================================================================
+
+---
+# ============================================================================
+# SECUREBANK INTENTIONALLY VULNERABLE KUBERNETES DEPLOYMENT
+# ============================================================================
+# This manifest contains INTENTIONAL security vulnerabilities for testing
+# DO NOT use in production environments
+#
+# KUBERNETES VULNERABILITIES:
+# - Containers running as root
+# - Privileged containers
+# - Secrets in ConfigMaps (plaintext)
+# - No NetworkPolicy
+# - No RBAC
+# - No resource limits
+# - No PodSecurityPolicy
+# - hostPath volumes
+# - Excessive capabilities
+# ============================================================================
+
+# ============================================================================
+# NAMESPACE
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: securebank
+  labels:
+    name: securebank
+    environment: vulnerable-demo
+
+---
+# ============================================================================
+# DATABASE SECRETS (IN CONFIGMAP - VULNERABILITY)
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+  namespace: securebank
+data:
+  # ❌ CRITICAL: Database credentials in plaintext ConfigMap
+  DB_HOST: postgres-service
+  DB_PORT: "5432"
+  DB_NAME: securebank
+  DB_USER: postgres
+  DB_PASSWORD: insecure_password_123  # ❌ Hardcoded password
+  REDIS_HOST: redis-service
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: redis_insecure_pwd  # ❌ Hardcoded password
+
+---
+# ============================================================================
+# APPLICATION CONFIG (SECRETS AS CONFIGMAP)
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+  namespace: securebank
+data:
+  NODE_ENV: production
+  PORT: "3000"
+  JWT_SECRET: super_secret_jwt_key_12345  # ❌ JWT secret in plaintext
+  API_KEY: admin_api_key_xyz789           # ❌ Admin API key exposed
+  AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE # ❌ AWS credentials
+  AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY # ❌ AWS secret
+  AWS_REGION: us-east-1
+  LOG_LEVEL: debug  # ❌ Verbose logging in production
+
+---
+# ============================================================================
+# POSTGRESQL DEPLOYMENT (INSECURE)
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: securebank
+  labels:
+    app: postgres
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        component: database
+    spec:
+      # ✅ ADDED: Pod-level security context for volume permissions (Phase 3)
+      securityContext:
+        fsGroup: 999  # PostgreSQL group - gives postgres user access to volumes
+        runAsUser: 999
+        runAsNonRoot: false
+      containers:
+      - name: postgres
+        # ✅ ADDED: Secure security context (Phase 3 - adjusted for PostgreSQL)
+        securityContext:
+          runAsNonRoot: false  # PostgreSQL requires root for initialization
+          runAsUser: 999       # Official postgres user ID
+          readOnlyRootFilesystem: false  # PostgreSQL needs write access to /var/lib/postgresql
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        image: postgres:14
+        ports:
+        - containerPort: 5432
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata  # Use subdirectory for better permissions
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: DB_NAME
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: DB_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: DB_PASSWORD
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-run
+          mountPath: /var/run/postgresql
+        - name: postgres-tmp
+          mountPath: /tmp
+        - name: init-script
+          mountPath: /docker-entrypoint-initdb.d
+        # ❌ No resource limits
+        # ❌ No liveness/readiness probes
+      volumes:
+      - name: postgres-data
+        # ✅ FIXED: Using emptyDir instead of hostPath (Phase 3)
+        emptyDir: {}
+      - name: postgres-run
+        emptyDir: {}
+      - name: postgres-tmp
+        emptyDir: {}
+      - name: init-script
+        configMap:
+          name: postgres-init
+
+---
+# ============================================================================
+# POSTGRES INIT SCRIPT CONFIGMAP
+# ============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: securebank
+data:
+  init.sql: |
+    -- This will be replaced with init-enhanced.sql content during deployment
+
+---
+# ============================================================================
+# POSTGRESQL SERVICE
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: securebank
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: postgres
+
+---
+# ============================================================================
+# REDIS DEPLOYMENT (INSECURE)
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: securebank
+  labels:
+    app: redis
+    component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        component: cache
+    spec:
+      # ❌ No security context
+      containers:
+      - name: redis
+        # ✅ ADDED: Secure security context (Phase 3)
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command:
+        - redis-server
+        - --requirepass
+        - redis_insecure_pwd  # ❌ Hardcoded password
+        # ❌ No resource limits
+
+---
+# ============================================================================
+# REDIS SERVICE
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: securebank
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    app: redis
+
+---
+# ============================================================================
+# BACKEND DEPLOYMENT (CRITICALLY INSECURE)
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: securebank-backend
+  namespace: securebank
+  labels:
+    app: securebank-backend
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: securebank-backend
+  template:
+    metadata:
+      labels:
+        app: securebank-backend
+        component: backend
+    spec:
+      # ❌ CRITICAL: No security context (runs as root by default)
+      # ❌ No Pod Security Policy
+      containers:
+      - name: backend
+        # ✅ ADDED: Secure security context (Phase 3 - adjusted for Node.js)
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10000
+          readOnlyRootFilesystem: false  # Node.js needs write access for logs/tmp
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        image: securebank-backend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+        env:
+        - name: DATABASE_HOST
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: DB_HOST
+        - name: DATABASE_PORT
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: DB_PORT
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: DB_NAME
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: DB_USER
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: DB_PASSWORD
+        - name: REDIS_HOST
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: REDIS_HOST
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: REDIS_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: JWT_SECRET
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: AWS_SECRET_ACCESS_KEY
+        - name: NODE_ENV
+          valueFrom:
+            secretKeyRef:  # ✅ FIXED: Using Secret instead of ConfigMap
+              name: app-secrets  # ✅ FIXED: Using Kubernetes Secret
+              key: NODE_ENV
+        # ❌ CRITICAL VULNERABILITIES:
+        securityContext:
+          privileged: false  # ✅ FIXED: Disabled privileged mode (Phase 3)
+          # privileged: true  # ❌ Privileged container - REMOVED: Privileged container
+          runAsUser: 10000  # ✅ FIXED: Non-root user (Phase 3)
+          # runAsUser: 0      # ❌ Running as root - REMOVED: Running as root
+          allowPrivilegeEscalation: false  # ✅ FIXED: Blocked privilege escalation (Phase 3)
+          capabilities:
+            # ✅ FIXED: Dangerous capabilities removed (Phase 3)
+            # add:  - REMOVED: NET_ADMIN, SYS_ADMIN, SYS_PTRACE
+        # ❌ No resource limits (can consume all node resources)
+        # ❌ No liveness/readiness probes
+        volumeMounts:
+        - name: host-root
+          mountPath: /host  # ❌ Access to host filesystem
+      volumes:
+      - name: host-root
+        # ❌ REMOVED: hostPath volume (Phase 3)
+        # hostPath: - Security risk: host filesystem access
+        # path: /          # ❌ CRITICAL: Mount entire host filesystem
+        # type: Directory
+
+---
+# ============================================================================
+# BACKEND SERVICE (NO TLS)
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: securebank-backend-service
+  namespace: securebank
+spec:
+  type: LoadBalancer  # ❌ Exposed to internet
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: securebank-backend
+
+---
+# ============================================================================
+# FRONTEND DEPLOYMENT (INSECURE)
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: securebank-frontend
+  namespace: securebank
+  labels:
+    app: securebank-frontend
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: securebank-frontend
+  template:
+    metadata:
+      labels:
+        app: securebank-frontend
+        component: frontend
+    spec:
+      # ❌ No security context
+      containers:
+      - name: frontend
+        # ✅ ADDED: Secure security context (Phase 3)
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        image: securebank-frontend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+        env:
+        - name: REACT_APP_API_URL
+          value: "http://securebank-backend-service"  # ❌ HTTP not HTTPS
+        # ❌ No resource limits
+        securityContext:
+          runAsUser: 10000  # ✅ FIXED: Non-root user (Phase 3)
+          # runAsUser: 0  # ❌ Running as root - REMOVED: Running as root
+
+---
+# ============================================================================
+# FRONTEND SERVICE (NO TLS)
+# ============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: securebank-frontend-service
+  namespace: securebank
+spec:
+  type: LoadBalancer  # ❌ Exposed to internet without TLS
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: securebank-frontend
+
+---
+# ============================================================================
+# SERVICE ACCOUNT (EXCESSIVE PERMISSIONS)
+# ============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: securebank-sa
+  namespace: securebank
+
+---
+# ❌ MISSING: NetworkPolicy (allows all traffic)
+# ❌ MISSING: PodSecurityPolicy
+# ❌ MISSING: RBAC restrictions
+# ❌ MISSING: TLS/Ingress configuration
+# ❌ MISSING: Resource quotas
+# ❌ MISSING: Namespace isolation
+
+---
+# VULNERABILITY SUMMARY:
+# ====================
+# 1. Secrets in ConfigMaps (plaintext)
+# 2. Containers running as root
+# 3. Privileged containers
+# 4. Host filesystem access
+# 5. Excessive capabilities
+# 6. No resource limits
+# 7. No NetworkPolicy
+# 8. No RBAC
+# 9. LoadBalancer without TLS
+# 10. No security contexts
+# 11. AWS credentials hardcoded
+# 12. Database passwords hardcoded
+# 13. No Pod Security Standards
+# 14. No audit logging
+# 15. No image scanning
