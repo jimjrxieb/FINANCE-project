@@ -256,11 +256,11 @@ class Merchant {
         return {
             id: this.id,
             username: this.username,
-            // ❌ PCI 8.2.3: Exposing hashed password in API responses!
-            password: this.password,
+            // ✅ FIXED PCI 8.2.3: Password hash no longer exposed in API responses
+            // password: this.password,  // REMOVED
             email: this.email,
-            // ❌ Security: Exposing API key in responses
-            api_key: this.api_key,
+            // ✅ FIXED: API key no longer exposed in general responses (use dedicated endpoint if needed)
+            // api_key: this.api_key,  // REMOVED
             created_at: this.created_at
         };
     }
